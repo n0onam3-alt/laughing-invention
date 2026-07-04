@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a2242">
+  <meta name="description" content="Mobile-first Min-Max training tracker with Supabase sync.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MinMax">
+  <title>MinMax Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <script>
+  // Apply saved theme before first paint to avoid a white flash in dark mode.
+  try{
+    var mmState = JSON.parse(localStorage.getItem('mm_tracker_v13_1_clean_sync_state') || 'null');
+    if(mmState && mmState.preferences && mmState.preferences.theme === 'dark'){
+      document.documentElement.classList.add('dark');
+      var mmMeta = document.querySelector('meta[name="theme-color"]');
+      if(mmMeta) mmMeta.setAttribute('content', '#081120');
+    }
+  }catch(e){}
+  </script>
+  <link rel="stylesheet" href="src/styles.css?v=16.0.0-essentials">
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="application/json" id="programFallback">{
+  "version": "7.0.0",
+  "title": "The Min-Max Program",
+  "split": [
+    "Full Body",
+    "Upper",
+    "Lower",
+    "Arms + Delts"
+  ],
+  "lightWeeks": [
+    1,
+    7
+  ],
+  "weeks": 12,
+  "days": {
+    "Full Body": [
+      {
+        "name": "Lying Leg Curl",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Seated Leg Curl",
+          "Nordic Ham Curl"
+        ],
+        "note": "Set the machine for the biggest stretch at the bottom; don't let your hips pop up."
+      },
+      {
+        "name": "Squat (Your Choice)",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "3 / 2",
+        "rest": "3-5 min",
+        "substitutions": [
+          "Back Squat",
+          "Front Squat",
+          "Hack Squat",
+          "Belt Squat",
+          "Smith Squat"
+        ],
+        "note": "Any squat variation works. Build to a hard top set."
+      },
+      {
+        "name": "Barbell Incline Press",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "2 / 1",
+        "rest": "3-5 min",
+        "substitutions": [
+          "Smith Incline Press",
+          "DB Incline Press"
+        ],
+        "note": "30–45° bench. Pause 1s at the bottom while keeping tension on the pecs."
+      },
+      {
+        "name": "Incline DB Y-Raise",
+        "sets": 1,
+        "reps": "8-10",
+        "rir": "0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Cable Y-Raise",
+          "Machine Lateral Raise"
+        ],
+        "note": "Back against a 30° incline; lift up and out in a Y shape."
+      },
+      {
+        "name": "Pull-Up (Wide Grip)",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "2 / 1",
+        "rest": "2-3 min",
+        "substitutions": [
+          "Lat Pulldown (Wide)",
+          "1-Arm Cable Pulldown"
+        ],
+        "note": "Control the negative, full ROM, feel the lats pull apart.",
+        "bw": true
+      },
+      {
+        "name": "Standing Calf Raise",
+        "sets": 1,
+        "reps": "6-8",
+        "rir": "0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Leg Press Calf Press",
+          "Donkey Calf Raise"
+        ],
+        "note": "1–2s pause at the bottom; roll through the balls of your feet."
+      }
+    ],
+    "Upper": [
+      {
+        "name": "Close-Grip Lat Pulldown",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "2 / 1",
+        "rest": "2-3 min",
+        "substitutions": [
+          "Close-Grip Pull-Up",
+          "1-Arm Cable Pulldown"
+        ],
+        "note": "Lean back about 15°, drive elbows down, squeeze shoulder blades."
+      },
+      {
+        "name": "Chest-Supported T-Bar Row",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "2 / 1",
+        "rest": "2-3 min",
+        "substitutions": [
+          "Chest-Supported Machine Row",
+          "DB Row"
+        ],
+        "note": "Flare elbows about 45° and squeeze your shoulder blades at the top."
+      },
+      {
+        "name": "Machine Shrug",
+        "sets": 1,
+        "reps": "6-8",
+        "rir": "1",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Barbell Shrug",
+          "Cable Shrug-In"
+        ],
+        "note": "Shrug up to your ears. Use straps if possible."
+      },
+      {
+        "name": "Machine Chest Press",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "2 / 1",
+        "rest": "3-5 min",
+        "substitutions": [
+          "Smith Bench Press",
+          "DB Bench Press"
+        ],
+        "note": "1s pause at the bottom with tension on the pecs."
+      },
+      {
+        "name": "High-Cable Lateral Raise",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "DB Lateral Raise",
+          "Machine Lateral Raise"
+        ],
+        "note": "Cable at hip height; let the hand pass past midline for a deep stretch."
+      },
+      {
+        "name": "1-Arm Reverse Pec Deck",
+        "sets": 1,
+        "reps": "8-10",
+        "rir": "0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Lying Reverse DB Flye",
+          "Reverse Cable Crossover"
+        ],
+        "note": "Sweep the weight out in the largest semi-circle you can."
+      },
+      {
+        "name": "Cable Crunch",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Weighted Crunch",
+          "Machine Crunch"
+        ],
+        "note": "Round the lower back as you crunch; strong mind-muscle connection."
+      }
+    ],
+    "Lower": [
+      {
+        "name": "Leg Extension",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Reverse Nordic",
+          "Sissy Squat"
+        ],
+        "note": "Seat back; pull your hips down into the seat using the handles."
+      },
+      {
+        "name": "Barbell RDL",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "3 / 2",
+        "rest": "2-3 min",
+        "substitutions": [
+          "DB RDL",
+          "Seated Cable Deadlift"
+        ],
+        "note": "Hips straight back, deep stretch, neutral spine — don't round."
+      },
+      {
+        "name": "Machine Hip Thrust",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "2 / 1",
+        "rest": "2-3 min",
+        "substitutions": [
+          "Barbell Hip Thrust",
+          "45° Hyperextension"
+        ],
+        "note": "Squeeze glutes hard at the top, control the way down."
+      },
+      {
+        "name": "Leg Press",
+        "sets": 1,
+        "reps": "6-8",
+        "rir": "1",
+        "rest": "2-3 min",
+        "substitutions": [
+          "Smith Machine Squat",
+          "Barbell Squat"
+        ],
+        "note": "Feet lower for quad focus; go as deep as you can without rounding."
+      },
+      {
+        "name": "Standing Calf Raise",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Leg Press Calf Press",
+          "Donkey Calf Raise"
+        ],
+        "note": "1–2s pause at the bottom; roll through the balls of your feet."
+      }
+    ],
+    "Arms + Delts": [
+      {
+        "name": "Bayesian Cable Curl",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Incline DB Curl",
+          "Standing DB Curl"
+        ],
+        "note": "Optionally lean forward; control the negative for a deep stretch."
+      },
+      {
+        "name": "Overhead Cable Triceps Extension",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Overhead DB Extension",
+          "Skull Crusher"
+        ],
+        "note": "Feel a deep stretch on the triceps through the whole negative."
+      },
+      {
+        "name": "Modified Zottman Curl",
+        "sets": 1,
+        "reps": "8-10",
+        "rir": "0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "DB Hammer Curl",
+          "Preacher Hammer Curl"
+        ],
+        "note": "Hammer on the way up, supinated palms up on the way down."
+      },
+      {
+        "name": "Cable Triceps Kickback",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Seated Dip Machine",
+          "Close-Grip Dip"
+        ],
+        "note": "Keep your upper arm behind your torso throughout the ROM."
+      },
+      {
+        "name": "DB Wrist Curl",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Cable Wrist Curl"
+        ],
+        "note": "Smooth, controlled reps."
+      },
+      {
+        "name": "DB Wrist Extension",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Cable Wrist Extension"
+        ],
+        "note": "Smooth, controlled reps."
+      },
+      {
+        "name": "Alternating DB Curl",
+        "sets": 1,
+        "reps": "6-8",
+        "rir": "0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Barbell Curl",
+          "EZ-Bar Curl"
+        ],
+        "note": "Slow, controlled reps."
+      },
+      {
+        "name": "Machine Lateral Raise",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "High-Cable Lateral Raise",
+          "DB Lateral Raise"
+        ],
+        "note": "Focus on squeezing the side delt to move the weight."
+      },
+      {
+        "name": "Dead Hang (optional)",
+        "sets": 2,
+        "reps": "Time",
+        "rir": "—",
+        "rest": "1-2 min",
+        "substitutions": [],
+        "note": "Hold for time. Try to add a few seconds each week.",
+        "bw": true,
+        "timed": true,
+        "optional": true
+      }
+    ]
+  }
+}</script>
+  <script defer src="src/app.js?v=16.0.0-essentials"></script>
+</head>
+<body>
+  <noscript><div class="noscript">Enable JavaScript to use MinMax Tracker.</div></noscript>
+
+  <div id="toast" class="toast" hidden></div>
+  <div id="modalRoot"></div>
+
+  <main id="app" class="shell">
+    <section id="pageTrain" class="page active" data-page="train">
+      <header class="card compact trainbar">
+        <div class="trainbar-top">
+          <h1 id="trainTitle">Train</h1>
+          <div class="week-mini">
+            <button id="weekMinus" type="button" aria-label="Previous week">−</button>
+            <span>W<b id="weekNumber">1</b></span>
+            <button id="weekPlus" type="button" aria-label="Next week">+</button>
+          </div>
+        </div>
+        <div id="dayTabs" class="chips" role="tablist" aria-label="Training day"></div>
+        <div class="progress-wrap">
+          <div class="progress-track" aria-label="Workout completion"><span id="workoutProgress"></span></div>
+          <div class="progress-meta"><span id="trainSub">Loading program…</span><span class="status-pill" id="syncChip">Local</span></div>
+        </div>
+      </header>
+
+      <div id="exerciseList" class="stack"></div>
+
+      <section class="card compact">
+        <button id="sessionToggle" class="details-toggle" type="button" aria-expanded="false"><span data-mark>+</span><b>Session info</b></button>
+        <div id="sessionFields" class="session-fields" hidden>
+          <div class="grid2">
+            <label>Date<input id="sDate" type="date"></label>
+            <label>Bodyweight<input id="sBw" type="number" inputmode="decimal" min="0" step="0.1" placeholder="kg"></label>
+            <label>Energy<input id="sEnergy" type="number" inputmode="numeric" min="1" max="5" step="1" placeholder="1-5"></label>
+            <label>Sleep<input id="sSleep" type="number" inputmode="numeric" min="1" max="5" step="1" placeholder="1-5"></label>
+          </div>
+          <label>Notes<input id="sNotes" type="text" maxlength="180" placeholder="Optional"></label>
+        </div>
+      </section>
+
+      <div class="sticky-actions">
+        <button id="saveWorkout" class="btn primary" type="button">Save workout</button>
+        <button id="clearDraft" class="btn ghost" type="button">Clear</button>
+      </div>
+    </section>
+
+    <section id="pageLog" class="page" data-page="log">
+      <header class="hero card compact"><h1>Log</h1><p class="small">Saved workouts</p></header>
+      <div id="logList" class="stack"></div>
+    </section>
+
+    <section id="pageProgress" class="page" data-page="progress">
+      <header class="hero card compact"><h1>Progress</h1></header>
+      <section class="card compact">
+        <div class="segmented" role="tablist" aria-label="Progress view">
+          <button id="viewOverall" class="seg active" type="button" data-view="overall">Overall</button>
+          <button id="viewExercise" class="seg" type="button" data-view="exercise">Exercise</button>
+        </div>
+        <div id="progressControls" class="grid2 controls-grid">
+          <label>Exercise<select id="progressExercise"></select></label>
+          <label>Metric<select id="progressMetric"><option value="auto">Auto</option><option value="e1rm">Estimated 1RM</option><option value="load">Best load</option><option value="volume">Volume</option><option value="reps">Reps / seconds</option></select></label>
+        </div>
+      </section>
+      <section id="statsGrid" class="stats-grid"></section>
+      <section class="card"><div class="section-head"><h2 id="chartTitle">Chart</h2><p id="chartSubtitle" class="muted"></p></div><div id="chartBox" class="chart-box"></div></section>
+      <section class="insights-grid">
+        <article id="recordsPanel" class="card insight good"></article>
+        <article id="weakPanel" class="card insight warning"></article>
+      </section>
+      <section class="card"><h2 id="listTitle">Entries</h2><div id="progressList" class="stack"></div></section>
+    </section>
+
+    <section id="pageSettings" class="page" data-page="settings">
+      <header class="hero card compact"><h1>Settings</h1></header>
+      <section class="card" id="authBox"></section>
+      <section class="card compact">
+        <button id="diagnosticsToggle" class="details-toggle" type="button" aria-expanded="false"><span data-mark>+</span><b>Sync diagnostics</b></button>
+        <div id="diagnostics" class="diagnostics" hidden></div>
+      </section>
+      <section class="card settings-actions">
+        <button id="darkToggle" class="btn secondary" type="button">Dark mode</button>
+        <button id="rirToggle" class="btn secondary" type="button" aria-pressed="false">Show RIR fields</button>
+        <button id="exportJson" class="btn secondary" type="button">Export JSON</button>
+        <button id="exportCsv" class="btn secondary" type="button">Export CSV</button>
+        <button id="importJsonBtn" class="btn secondary" type="button">Import JSON</button>
+        <input id="importFile" type="file" accept="application/json,.json" hidden>
+      </section>
+      <section class="card danger-zone">
+        <h2>Danger zone</h2>
+        <p class="muted">Reset clears this device only. Erase removes local and cloud data if signed in.</p>
+        <button id="resetLocal" class="btn danger-outline" type="button">Reset local data</button>
+        <button id="eraseAll" class="btn danger-fill" type="button">Erase all data</button>
+      </section>
+    </section>
+  </main>
+
+  <button id="restPill" class="rest-pill" type="button" hidden aria-label="Rest timer — tap to skip"></button>
+
+  <nav class="bottom-nav" aria-label="Main navigation">
+    <button class="navbtn active" data-nav="train" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M7.5 6.5v11M16.5 6.5v11M20 9v6M7.5 12h9"/></svg>Train</button>
+    <button class="navbtn" data-nav="log" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9"/></svg>Log</button>
+    <button class="navbtn" data-nav="progress" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/></svg>Progress</button>
+    <button class="navbtn" data-nav="settings" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>Settings</button>
+  </nav>
+</body>
+</html>

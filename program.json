@@ -1,0 +1,351 @@
+{
+  "version": "7.0.0",
+  "title": "The Min-Max Program",
+  "split": [
+    "Full Body",
+    "Upper",
+    "Lower",
+    "Arms + Delts"
+  ],
+  "lightWeeks": [
+    1,
+    7
+  ],
+  "weeks": 12,
+  "days": {
+    "Full Body": [
+      {
+        "name": "Lying Leg Curl",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Seated Leg Curl",
+          "Nordic Ham Curl"
+        ],
+        "note": "Set the machine for the biggest stretch at the bottom; don't let your hips pop up."
+      },
+      {
+        "name": "Squat (Your Choice)",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "3 / 2",
+        "rest": "3-5 min",
+        "substitutions": [
+          "Back Squat",
+          "Front Squat",
+          "Hack Squat",
+          "Belt Squat",
+          "Smith Squat"
+        ],
+        "note": "Any squat variation works. Build to a hard top set."
+      },
+      {
+        "name": "Barbell Incline Press",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "2 / 1",
+        "rest": "3-5 min",
+        "substitutions": [
+          "Smith Incline Press",
+          "DB Incline Press"
+        ],
+        "note": "30–45° bench. Pause 1s at the bottom while keeping tension on the pecs."
+      },
+      {
+        "name": "Incline DB Y-Raise",
+        "sets": 1,
+        "reps": "8-10",
+        "rir": "0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Cable Y-Raise",
+          "Machine Lateral Raise"
+        ],
+        "note": "Back against a 30° incline; lift up and out in a Y shape."
+      },
+      {
+        "name": "Pull-Up (Wide Grip)",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "2 / 1",
+        "rest": "2-3 min",
+        "substitutions": [
+          "Lat Pulldown (Wide)",
+          "1-Arm Cable Pulldown"
+        ],
+        "note": "Control the negative, full ROM, feel the lats pull apart.",
+        "bw": true
+      },
+      {
+        "name": "Standing Calf Raise",
+        "sets": 1,
+        "reps": "6-8",
+        "rir": "0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Leg Press Calf Press",
+          "Donkey Calf Raise"
+        ],
+        "note": "1–2s pause at the bottom; roll through the balls of your feet."
+      }
+    ],
+    "Upper": [
+      {
+        "name": "Close-Grip Lat Pulldown",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "2 / 1",
+        "rest": "2-3 min",
+        "substitutions": [
+          "Close-Grip Pull-Up",
+          "1-Arm Cable Pulldown"
+        ],
+        "note": "Lean back about 15°, drive elbows down, squeeze shoulder blades."
+      },
+      {
+        "name": "Chest-Supported T-Bar Row",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "2 / 1",
+        "rest": "2-3 min",
+        "substitutions": [
+          "Chest-Supported Machine Row",
+          "DB Row"
+        ],
+        "note": "Flare elbows about 45° and squeeze your shoulder blades at the top."
+      },
+      {
+        "name": "Machine Shrug",
+        "sets": 1,
+        "reps": "6-8",
+        "rir": "1",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Barbell Shrug",
+          "Cable Shrug-In"
+        ],
+        "note": "Shrug up to your ears. Use straps if possible."
+      },
+      {
+        "name": "Machine Chest Press",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "2 / 1",
+        "rest": "3-5 min",
+        "substitutions": [
+          "Smith Bench Press",
+          "DB Bench Press"
+        ],
+        "note": "1s pause at the bottom with tension on the pecs."
+      },
+      {
+        "name": "High-Cable Lateral Raise",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "DB Lateral Raise",
+          "Machine Lateral Raise"
+        ],
+        "note": "Cable at hip height; let the hand pass past midline for a deep stretch."
+      },
+      {
+        "name": "1-Arm Reverse Pec Deck",
+        "sets": 1,
+        "reps": "8-10",
+        "rir": "0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Lying Reverse DB Flye",
+          "Reverse Cable Crossover"
+        ],
+        "note": "Sweep the weight out in the largest semi-circle you can."
+      },
+      {
+        "name": "Cable Crunch",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Weighted Crunch",
+          "Machine Crunch"
+        ],
+        "note": "Round the lower back as you crunch; strong mind-muscle connection."
+      }
+    ],
+    "Lower": [
+      {
+        "name": "Leg Extension",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Reverse Nordic",
+          "Sissy Squat"
+        ],
+        "note": "Seat back; pull your hips down into the seat using the handles."
+      },
+      {
+        "name": "Barbell RDL",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "3 / 2",
+        "rest": "2-3 min",
+        "substitutions": [
+          "DB RDL",
+          "Seated Cable Deadlift"
+        ],
+        "note": "Hips straight back, deep stretch, neutral spine — don't round."
+      },
+      {
+        "name": "Machine Hip Thrust",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "2 / 1",
+        "rest": "2-3 min",
+        "substitutions": [
+          "Barbell Hip Thrust",
+          "45° Hyperextension"
+        ],
+        "note": "Squeeze glutes hard at the top, control the way down."
+      },
+      {
+        "name": "Leg Press",
+        "sets": 1,
+        "reps": "6-8",
+        "rir": "1",
+        "rest": "2-3 min",
+        "substitutions": [
+          "Smith Machine Squat",
+          "Barbell Squat"
+        ],
+        "note": "Feet lower for quad focus; go as deep as you can without rounding."
+      },
+      {
+        "name": "Standing Calf Raise",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Leg Press Calf Press",
+          "Donkey Calf Raise"
+        ],
+        "note": "1–2s pause at the bottom; roll through the balls of your feet."
+      }
+    ],
+    "Arms + Delts": [
+      {
+        "name": "Bayesian Cable Curl",
+        "sets": 2,
+        "reps": "6-8",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Incline DB Curl",
+          "Standing DB Curl"
+        ],
+        "note": "Optionally lean forward; control the negative for a deep stretch."
+      },
+      {
+        "name": "Overhead Cable Triceps Extension",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Overhead DB Extension",
+          "Skull Crusher"
+        ],
+        "note": "Feel a deep stretch on the triceps through the whole negative."
+      },
+      {
+        "name": "Modified Zottman Curl",
+        "sets": 1,
+        "reps": "8-10",
+        "rir": "0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "DB Hammer Curl",
+          "Preacher Hammer Curl"
+        ],
+        "note": "Hammer on the way up, supinated palms up on the way down."
+      },
+      {
+        "name": "Cable Triceps Kickback",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Seated Dip Machine",
+          "Close-Grip Dip"
+        ],
+        "note": "Keep your upper arm behind your torso throughout the ROM."
+      },
+      {
+        "name": "DB Wrist Curl",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Cable Wrist Curl"
+        ],
+        "note": "Smooth, controlled reps."
+      },
+      {
+        "name": "DB Wrist Extension",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Cable Wrist Extension"
+        ],
+        "note": "Smooth, controlled reps."
+      },
+      {
+        "name": "Alternating DB Curl",
+        "sets": 1,
+        "reps": "6-8",
+        "rir": "0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "Barbell Curl",
+          "EZ-Bar Curl"
+        ],
+        "note": "Slow, controlled reps."
+      },
+      {
+        "name": "Machine Lateral Raise",
+        "sets": 2,
+        "reps": "8-10",
+        "rir": "1 / 0",
+        "rest": "1-2 min",
+        "substitutions": [
+          "High-Cable Lateral Raise",
+          "DB Lateral Raise"
+        ],
+        "note": "Focus on squeezing the side delt to move the weight."
+      },
+      {
+        "name": "Dead Hang (optional)",
+        "sets": 2,
+        "reps": "Time",
+        "rir": "—",
+        "rest": "1-2 min",
+        "substitutions": [],
+        "note": "Hold for time. Try to add a few seconds each week.",
+        "bw": true,
+        "timed": true,
+        "optional": true
+      }
+    ]
+  }
+}
