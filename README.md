@@ -2,6 +2,34 @@
 
 Mobile-first PWA workout tracker for the Min-Max Program.
 
+## v17 "ios"
+A full performance + UI pass: the app renders like an iOS app and stays fast with months of logs.
+
+Performance:
+- history-derived data (per-exercise entries, summaries, sorted sessions) is computed once and
+  memoized; it used to be re-filtered and re-sorted on every accordion toggle, day switch and
+  Progress render
+- hidden pages are no longer re-rendered after every save/sync — they're marked dirty and render
+  on visit (Progress no longer runs its full analysis at startup either)
+- the Log renders lazily: month-grouped list, 30 entries at a time with "Show more", and workout
+  details are built only when a card is opened (huge DOM reduction on long histories)
+- the Supabase SDK (~120 KB gz) is loaded on demand — only when a stored session exists or you
+  tap Sign in — instead of being parsed on every startup
+- the service worker serves versioned assets (`/src/*?v=`) cache-first, so repeat startups are
+  instant; HTML stays network-first with a 3.5 s timeout fallback to cache on flaky connections
+- offscreen log cards skip layout/paint via `content-visibility`
+
+UI/UX (iOS style):
+- iOS system palette: grouped-gray light mode, true-black dark mode, iOS blue/green/red accents
+- frosted-glass tab bar and sticky save bar, Dynamic-Island-style rest pill, iOS switches,
+  segmented controls, alert-style confirm dialogs, capsule toast
+- theme setting is now Auto / Light / Dark — Auto follows the system, live
+- Settings rebuilt as grouped lists; Log grouped by month with tap-to-expand cards
+- smooth pixel-space progress chart: no more stretched points, gradient fill, min/max labels,
+  tap a point for its value
+- per-tab scroll position is remembered; tapping the active tab scrolls to top
+- the autofill hint disappears after the first time you use a set-number button
+
 ## v16 "essentials"
 More useful, less noise:
 - session duration is tracked automatically (first logged set → save) and shown in the Log

@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '16.0.0-essentials';
+const APP_VERSION = '17.0.0-ios';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';
@@ -19,7 +19,7 @@ const state = {
   lastSyncAt:null, lastSyncError:null, syncRunning:false, user:null, supabase:null,
   schema:{deletedAt:true, meta:true}, progressView:'overall', progressExercise:'',
   sessionOpen:false, editId:null, saving:false, deleting:false, authBusy:false,
-  prefs:{theme:'light', showRir:false}, swReloading:false
+  prefs:{theme:'auto', showRir:false, usedAutofill:false}, swReloading:false
 };
 
 const $ = (s, r=document) => r.querySelector(s);
@@ -44,11 +44,46 @@ const store = {
   clear(){ try{window.localStorage.clear();}catch(e){for(const k of Object.keys(memoryStore)) delete memoryStore[k];} }
 };
 
+/* Derived-data caches. History-derived lookups (per-exercise entries, summaries, sorted
+   sessions) are rebuilt lazily and invalidated once per data change instead of being
+   recomputed from scratch on every render — this was the main source of UI lag. */
+const entryCache=new Map(), summaryCache=new Map(), metaIndex=new Map();
+let sortedSessionsCache=null, namesCache=null;
+const dirty={train:false, log:true, progress:true};
+const pageScroll={};
+function invalidateDataCache(){ entryCache.clear(); summaryCache.clear(); sortedSessionsCache=null; namesCache=null; }
+function activeSessionsAsc(){
+  if(!sortedSessionsCache){
+    sortedSessionsCache=state.sessions.filter(s=>!state.pendingDeletes.has(String(s.id)))
+      .sort((a,b)=>new Date(a.date)-new Date(b.date)||String(updatedAt(a)||'').localeCompare(String(updatedAt(b)||''))||String(a.id).localeCompare(String(b.id)));
+  }
+  return sortedSessionsCache;
+}
+function trainInputFocused(){ const a=document.activeElement; return !!(a && a.closest && a.closest('#pageTrain') && (a.tagName==='INPUT'||a.tagName==='SELECT')); }
+/* Pages re-render only when visible; hidden pages are just marked dirty and render on visit. */
+function dataChanged(){
+  invalidateDataCache();
+  dirty.train=dirty.log=dirty.progress=true;
+  renderSyncChip();
+  if(state.page==='train' && trainInputFocused()) return; // don't yank focus mid-typing; train re-renders on next interaction
+  renderActivePage();
+}
+function renderActivePage(){
+  if(state.page==='train'){ if(dirty.train) renderTrain(); }
+  else if(state.page==='log'){ if(dirty.log) renderHistory(); }
+  else if(state.page==='progress'){ if(dirty.progress) renderProgress(); }
+  else if(state.page==='settings'){ renderDiagnostics(); }
+}
+function haptic(pattern){ try{ navigator.vibrate?.(pattern); }catch(e){} }
+
 function toast(msg, tone=''){
   const el = $('#toast');
   if(!el) return;
-  if(!msg){ el.hidden=true; el.textContent=''; el.dataset.tone=''; return; }
+  const pill=$('#restPill');
+  if(!msg){ el.hidden=true; el.textContent=''; el.dataset.tone=''; el.classList.remove('show'); pill?.classList.remove('shifted'); return; }
   el.textContent = msg; el.hidden = false; el.dataset.tone = tone;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  pill?.classList.add('shifted');
   clearTimeout(el._t); el._t=setTimeout(()=>toast(''), 2600);
 }
 
@@ -96,28 +131,34 @@ function sessionSignature(s){ if(!s) return ''; return [s.day||'', s.date||'', s
 function sessionSnapshot(s){ if(!s) return null; return {id:String(s.id), date:s.date||localDate(), week:clamp(s.week||1,1,12), day:state.split.includes(s.day)?s.day:(state.split[0]||'Full Body'), bw:s.bw??null, notes:String(s.notes||'').slice(0,180), exercises:Array.isArray(s.exercises)?s.exercises:[], meta:normalizeMeta(s.meta||{}), updated_at:updatedAt(s)}; }
 function similarSessionCount(session){ if(!session) return 0; const sig=sessionSignature(session); return state.sessions.filter(s=>String(s.id)!==String(session.id) && sessionSignature(s)===sig && !state.pendingDeletes.has(String(s.id))).length; }
 function duplicateOf(session){ if(!session) return null; const sig=sessionSignature(session); return state.sessions.find(s=>String(s.id)!==String(session.id) && sessionSignature(s)===sig && !state.pendingDeletes.has(String(s.id))) || null; }
-function queueDelete(id, session=null){ id=String(id); state.pendingDeletes.add(id); state.pendingUpserts.delete(id); const previous=state.deleteMeta[id]||{}; state.deleteMeta[id]={...previous, id, signature:sessionSignature(session)||previous.signature||'', snapshot:sessionSnapshot(session)||previous.snapshot||null, deletedAt:previous.deletedAt||nowIso(), cloudConfirmed:false}; saveLocal(false); }
-function markDeleteConfirmed(id){ id=String(id); state.pendingDeletes.delete(id); delete state.deleteMeta[id]; saveLocal(false); }
-function unqueueDelete(id){ id=String(id); state.pendingDeletes.delete(id); delete state.deleteMeta[id]; saveLocal(false); }
-function clearDeleteQueue(){ state.pendingDeletes.clear(); state.deleteMeta={}; saveLocal(false); }
+function queueDelete(id, session=null){ id=String(id); state.pendingDeletes.add(id); state.pendingUpserts.delete(id); const previous=state.deleteMeta[id]||{}; state.deleteMeta[id]={...previous, id, signature:sessionSignature(session)||previous.signature||'', snapshot:sessionSnapshot(session)||previous.snapshot||null, deletedAt:previous.deletedAt||nowIso(), cloudConfirmed:false}; invalidateDataCache(); saveLocal(false); }
+function markDeleteConfirmed(id){ id=String(id); state.pendingDeletes.delete(id); delete state.deleteMeta[id]; invalidateDataCache(); saveLocal(false); }
+function unqueueDelete(id){ id=String(id); state.pendingDeletes.delete(id); delete state.deleteMeta[id]; invalidateDataCache(); saveLocal(false); }
+function clearDeleteQueue(){ state.pendingDeletes.clear(); state.deleteMeta={}; invalidateDataCache(); saveLocal(false); }
 function pendingDeleteCount(){ return state.pendingDeletes.size; }
 function isDeletedId(id){ return state.pendingDeletes.has(String(id)); }
 function pruneQueues(){ const activeIds=new Set(state.sessions.map(s=>String(s.id))); for(const id of [...state.pendingUpserts]){ if(!activeIds.has(String(id)) || state.pendingDeletes.has(String(id))) state.pendingUpserts.delete(String(id)); } for(const id of state.pendingDeletes){ if(!state.deleteMeta[id]) state.deleteMeta[id]={id,deletedAt:nowIso(),cloudConfirmed:false}; } }
-function purgeQueuedLocalDeletes(){ if(!state.pendingDeletes?.size) return; state.sessions = state.sessions.filter(s => !isDeletedId(s.id)); }
+function purgeQueuedLocalDeletes(){ if(!state.pendingDeletes?.size) return; const before=state.sessions.length; state.sessions = state.sessions.filter(s => !isDeletedId(s.id)); if(state.sessions.length!==before) invalidateDataCache(); }
 
-function setTheme(theme){
-  const dark = theme === 'dark';
-  state.prefs.theme = dark ? 'dark' : 'light';
+/* Theme: Auto follows the system (iOS-style), Light/Dark force it. */
+const themeMedia = typeof matchMedia==='function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+themeMedia?.addEventListener?.('change', ()=>{ if(state.prefs.theme==='auto') applyResolvedTheme(); });
+function applyResolvedTheme(){
+  const dark = state.prefs.theme==='dark' || (state.prefs.theme==='auto' && !!themeMedia?.matches);
   document.documentElement.classList.toggle('dark', dark);
   document.body.classList.toggle('dark', dark);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if(meta) meta.setAttribute('content', dark ? '#081120' : '#0a2242');
-  const btn = $('#darkToggle'); if(btn) btn.textContent = dark ? 'Light mode' : 'Dark mode';
+  if(meta) meta.setAttribute('content', dark ? '#000000' : '#f2f2f7');
+}
+function setTheme(pref){
+  state.prefs.theme = pref==='dark' || pref==='light' ? pref : 'auto';
+  applyResolvedTheme();
+  $$('#themeSeg [data-theme-pref]').forEach(b=>{ const on=b.dataset.themePref===state.prefs.theme; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
 }
 function setShowRir(on){
   state.prefs.showRir = !!on;
   $('#exerciseList')?.classList.toggle('advanced', state.prefs.showRir);
-  const btn = $('#rirToggle'); if(btn){ btn.textContent = state.prefs.showRir ? 'Hide RIR fields' : 'Show RIR fields'; btn.setAttribute('aria-pressed', String(state.prefs.showRir)); }
+  const t = $('#rirToggle'); if(t) t.checked = state.prefs.showRir;
 }
 
 function localStateSnapshot(){
@@ -130,7 +171,7 @@ function localStateSnapshot(){
     deleteMeta:state.deleteMeta||{},
     lastSyncAt:state.lastSyncAt,
     lastSyncError:state.lastSyncError,
-    preferences:{theme:state.prefs.theme, showRir:state.prefs.showRir},
+    preferences:{theme:state.prefs.theme, showRir:state.prefs.showRir, usedAutofill:state.prefs.usedAutofill},
     week:state.week,
     day:state.day
   };
@@ -140,8 +181,9 @@ function loadLocal(){
   let raw=store.getItem(STORE_KEY), parsed=null;
   if(!raw){ for(const k of LEGACY_KEYS){ raw=store.getItem(k); if(raw) break; } }
   if(raw){ try{ parsed=JSON.parse(raw); }catch(e){ parsed=null; } }
-  const theme=parsed?.preferences?.theme || parsed?.theme || 'light'; setTheme(theme==='dark'?'dark':'light');
+  setTheme(parsed?.preferences?.theme || parsed?.theme || 'auto');
   state.prefs.showRir = !!parsed?.preferences?.showRir;
+  state.prefs.usedAutofill = !!parsed?.preferences?.usedAutofill;
   state.week=clamp(parsed?.week||1,1,12);
   state.day=state.split.includes(parsed?.day)?parsed.day:(state.split[0]||state.day);
   const pendingDeletes = Array.isArray(parsed?.pendingDeletes) ? parsed.pendingDeletes.map(String) : readLegacyQueue([DELETE_QUEUE_KEY,...LEGACY_DELETE_QUEUE_KEYS]);
@@ -153,6 +195,7 @@ function loadLocal(){
   state.lastSyncAt = parsed?.lastSyncAt || null;
   state.lastSyncError = parsed?.lastSyncError || null;
   state.sessions=(Array.isArray(parsed?.sessions)?parsed.sessions:[]).map(normalizeSession).filter(Boolean).filter(s=>!state.pendingDeletes.has(String(s.id)));
+  invalidateDataCache();
   pruneQueues();
   saveLocal(false);
   try{ const d=JSON.parse(store.getItem(DRAFT_KEY)||'null'); state.draft=d&&typeof d==='object'?{...createDraft(),...d,meta:normalizeMeta(d.meta||{})}:createDraft(); }catch(e){ initDraft(); }
@@ -171,7 +214,7 @@ async function confirmClearDraft(){
   clearDraft(); if(hasData) toast('Draft cleared');
 }
 
-function applyProgram(p){ state.program=p; state.split=p.split || Object.keys(p.days||{}); if(!state.split.includes(state.day)) state.day=state.split[0]; }
+function applyProgram(p){ state.program=p; state.split=p.split || Object.keys(p.days||{}); metaIndex.clear(); for(const d of state.split){ for(const ex of (p.days?.[d]||[])){ if(!metaIndex.has(ex.name)) metaIndex.set(ex.name, ex); } } if(!state.split.includes(state.day)) state.day=state.split[0]; }
 function loadProgramSync(){
   let p=null;
   try{ p=JSON.parse(document.getElementById('programFallback')?.textContent || 'null'); }catch(e){}
@@ -189,16 +232,25 @@ async function refreshProgram(){
   }catch(e){}
 }
 function currentExercises(){ return state.program?.days?.[state.day] || []; }
-function findExerciseMeta(name){ for(const d of state.split){ const ex=(state.program?.days?.[d]||[]).find(x=>x.name===name); if(ex) return ex; } return {}; }
+function findExerciseMeta(name){ return metaIndex.get(name) || {}; }
 function isBodyweightExercise(name){ return !!findExerciseMeta(name).bw; }
 
-function renderApp(){ renderAuth(); renderSyncChip(); renderTrain(); renderHistory(); renderProgress(); renderDiagnostics(); }
-function setPage(page){ state.page=page; $$('.page').forEach(p=>p.classList.toggle('active', p.dataset.page===page)); $$('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.nav===page)); if(page==='progress') renderProgress(); if(page==='log') renderHistory(); if(page==='settings') {renderAuth(); renderDiagnostics();} }
-function renderTrain(){ const list=currentExercises(); if(state.exIndex>=list.length) state.exIndex=firstOpenIndex(); $('#weekNumber').textContent=state.week; renderDayTabs(); fillSessionFields(); renderWorkout(); renderTrainStatus(); }
+function renderApp(){ dirty.train=dirty.log=dirty.progress=true; renderAuth(); renderSyncChip(); renderDiagnostics(); renderActivePage(); }
+function setPage(page){
+  if(page===state.page){ window.scrollTo({top:0, behavior:'smooth'}); return; } // iOS: tap active tab → scroll to top
+  pageScroll[state.page]=window.scrollY;
+  state.page=page;
+  $$('.page').forEach(p=>p.classList.toggle('active', p.dataset.page===page));
+  $$('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.nav===page));
+  if(page==='settings') renderAuth();
+  renderActivePage();
+  window.scrollTo(0, pageScroll[page]||0);
+}
+function renderTrain(){ dirty.train=false; const list=currentExercises(); if(state.exIndex>=list.length) state.exIndex=firstOpenIndex(); $('#weekNumber').textContent=state.week; renderDayTabs(); fillSessionFields(); renderWorkout(); renderTrainStatus(); }
 function renderDayTabs(){ $('#dayTabs').innerHTML = state.split.map(d=>`<button class="chip ${d===state.day?'active':''}" data-day="${esc(d)}" type="button" role="tab" aria-selected="${d===state.day}">${esc(d)}</button>`).join(''); }
 function completedCount(){ return currentExercises().filter(ex => (state.draft.exercises[ex.name]?.sets||[]).some(s=>s.reps>0)).length; }
 function renderTrainStatus(){ const total=currentExercises().length, done=completedCount(); const light=(state.program?.lightWeeks||[]).includes(state.week); $('#trainTitle').textContent=state.day; $('#trainSub').textContent=`${done}/${total} logged${light?' · light week':''}`; $('#workoutProgress').style.width= total ? `${done/total*100}%` : '0%'; }
-function lastBodyweight(){ return [...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id)) && Number(s.bw)>0).sort((a,b)=>new Date(b.date)-new Date(a.date))[0]?.bw || null; }
+function lastBodyweight(){ const list=activeSessionsAsc(); for(let i=list.length-1;i>=0;i--){ if(Number(list[i].bw)>0) return list[i].bw; } return null; }
 function fillSessionFields(){ const lastBw=lastBodyweight(); $('#sDate').value=state.draft.date||localDate(); $('#sBw').value=state.draft.bw??''; $('#sBw').placeholder=lastBw?`${round(lastBw)} kg`:'kg'; $('#sNotes').value=state.draft.notes||''; $('#sEnergy').value=state.draft.meta.energy??''; $('#sSleep').value=state.draft.meta.sleep??''; }
 function collectSessionFields(){ state.draft.date=$('#sDate').value||localDate(); state.draft.bw=$('#sBw').value===''?null:Math.max(0,Number($('#sBw').value)||0); state.draft.notes=$('#sNotes').value.trim().slice(0,180); state.draft.meta.energy=$('#sEnergy').value?clamp($('#sEnergy').value,1,5):null; state.draft.meta.sleep=$('#sSleep').value?clamp($('#sSleep').value,1,5):null; saveDraft(); }
 
@@ -215,7 +267,7 @@ function collapsedSummary(ex, last){
 }
 function renderWorkout(){
   const list=currentExercises(); const host=$('#exerciseList'); if(!host) return;
-  if(!list.length){ host.innerHTML='<div class="empty">No exercises for this day.</div>'; return; }
+  if(!list.length){ host.innerHTML='<div class="empty">No exercises for this day.<br>Pick another day above.</div>'; return; }
   host.innerHTML=list.map((ex,i)=>{
     const hist=exerciseEntries(ex.name); const last=hist[hist.length-1];
     const done=isExerciseDone(ex.name); const open=i===state.exIndex;
@@ -224,7 +276,7 @@ function renderWorkout(){
       <button class="ex-head" type="button" data-exi="${i}" aria-expanded="${open}">
         <span class="ex-status" aria-hidden="true">${done?'\u2713':i+1}</span>
         <span class="ex-title"><b>${esc(ex.name)}</b><small class="${sum.tone}">${esc(sum.text)}</small></span>
-        <span class="ex-caret" aria-hidden="true">${open?'\u2212':'+'}</span>
+        <span class="ex-caret" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 10l4 4 4-4"/></svg></span>
       </button>
       ${open?renderExBody(ex,last):''}
     </article>`;
@@ -243,12 +295,12 @@ function renderExBody(ex,last){
   }
   return `<div class="ex-body">
     <div class="goal-row">
-      <div class="goal-box"><span>Target \u00b7 ${esc(ex.reps)} reps \u00b7 RIR ${esc(ex.rir)}</span>${esc(makeGoal(ex,last))}</div>
+      <div class="goal-box"><span>Target ${esc(ex.reps)} \u00b7 RIR ${esc(String(ex.rir||'\u2014').replace(/\s+/g,''))}</span>${esc(makeGoal(ex,last))}</div>
       <button class="rest-btn ${running?'running':''}" data-rest type="button" aria-label="Rest timer">${running?'\u2026':'Rest '+esc(ex.rest||'2 min')}</button>
     </div>
     <p class="last-line">${last?`Last time <b>${last.sets.map(setLabel).map(esc).join(' \u00b7 ')}</b> \u00b7 ${esc(shortDate(last.date))}`:'First session \u2014 set your baseline.'}</p>
     <div class="sets">${sets}</div>
-    ${last?'<p class="hint">Tap a set number to fill in last time\u2019s numbers.</p>':''}
+    ${last && !state.prefs.usedAutofill?'<p class="hint">Tap a set number to fill in last time\u2019s numbers.</p>':''}
     <details class="tech"><summary>Technique</summary><div><p><b>Technique:</b> ${esc(ex.note||'\u2014')}</p><p><b>Substitutions:</b> ${(ex.substitutions||[]).map(esc).join(' \u00b7 ')||'\u2014'}</p></div></details>
   </div>`;
 }
@@ -270,7 +322,7 @@ function toggleExercise(i){
   renderWorkout();
   if(state.exIndex>=0){ const el=$(`.ex-block[data-i="${state.exIndex}"]`); el?.scrollIntoView({block:'nearest',behavior:'smooth'}); }
 }
-function applyQuick(card, action){ if(!card) return; const block=card.closest('.ex-block'); const name=block?.dataset.ex; if(!name) return; const load=$('[data-field="load"]',card), reps=$('[data-field="reps"]',card), idx=Number(card.dataset.set), last=exerciseEntries(name).slice(-1)[0]?.sets?.[idx] || null; if(action==='same'){ if(!last) return toast('No previous set'); load.value=last.load||''; reps.value=last.reps||''; } if(action==='clearSet'){ load.value=''; reps.value=''; const rir=$('[data-field="rir"]',card); if(rir) rir.value=''; } updateSetsFor(block); }
+function applyQuick(card, action){ if(!card) return; const block=card.closest('.ex-block'); const name=block?.dataset.ex; if(!name) return; const load=$('[data-field="load"]',card), reps=$('[data-field="reps"]',card), idx=Number(card.dataset.set), last=exerciseEntries(name).slice(-1)[0]?.sets?.[idx] || null; if(action==='same'){ if(!last) return toast('No previous set'); load.value=last.load||''; reps.value=last.reps||''; haptic(8); if(!state.prefs.usedAutofill){ state.prefs.usedAutofill=true; $$('.hint').forEach(h=>h.remove()); saveLocal(false); } } if(action==='clearSet'){ load.value=''; reps.value=''; const rir=$('[data-field="rir"]',card); if(rir) rir.value=''; } updateSetsFor(block); }
 
 /* Rest timer \u2014 parses the plan's rest range, keeps running while you browse, vibrates when done. */
 let restInterval=null, restEndsAt=0, restExName='';
@@ -333,7 +385,8 @@ async function saveWorkout(){
     else { initDraft(); cancelDraftSave(); store.removeItem(DRAFT_KEY); }
     stopRest();
     state.exIndex=firstOpenIndex();
-    saveLocal(); renderTrain(); renderHistory(); renderProgress();
+    saveLocal(); dataChanged();
+    haptic(prs.length?[15,70,15]:12);
     const prMsg=prs.length?`🏆 PR · ${prs[0]}${prs.length>1?` +${prs.length-1} more`:''} — `:'';
     if(state.user){ const ok=await syncNow(false); toast(ok?`${prMsg}saved & synced`:`${prMsg}saved locally · sync pending`, ok?'':'danger'); }
     else { toast(`${prMsg}saved locally`); }
@@ -349,18 +402,38 @@ function sessionInfoLine(s){
   const notes=String(s.notes||'').trim();
   return `${bits?`<div class="small" style="margin-top:8px">${esc(bits)}</div>`:''}${notes?`<div class="small" style="margin-top:${bits?'2px':'8px'}">“${esc(notes)}”</div>`:''}`;
 }
+/* Log list: newest first, grouped by month, paginated, details rendered on demand.
+   Keeping the details out of the initial markup keeps the DOM small on long histories. */
+let logVisibleCount=30;
+function monthLabel(d){ const x=new Date(`${d}T00:00:00`); return Number.isNaN(x.getTime())?d:x.toLocaleDateString(undefined,{month:'long',year:'numeric'}); }
+function sessionDetailsHtml(s){
+  return `${sessionInfoLine(s)}${s.exercises.map(e=>`<div style="margin-top:8px"><b>${esc(e.name)}</b><div class="small">${e.sets.map(setLabel).join(', ')}</div></div>`).join('')}<div class="grid2" style="margin-top:12px"><button class="btn secondary" data-edit="${esc(s.id)}" type="button">Edit</button><button class="btn danger-outline" data-delete="${esc(s.id)}" type="button">Delete</button></div>`;
+}
 function renderHistory(){
+  dirty.log=false;
   purgeQueuedLocalDeletes();
-  const list=[...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id))).sort((a,b)=>new Date(b.date)-new Date(a.date)||String(updatedAt(b)||'').localeCompare(String(updatedAt(a)||''))||String(b.id).localeCompare(String(a.id)));
-  const host=$('#logList');
-  if(!list.length){ host.innerHTML='<div class="empty">No workouts yet.</div>'; return; }
-  const withSig=list.map(s=>[s,sessionSignature(s)]);
-  const sigCount=new Map(); for(const [,sig] of withSig) sigCount.set(sig,(sigCount.get(sig)||0)+1);
-  host.innerHTML=withSig.map(([s,sig])=>{
-    const similar=sigCount.get(sig)-1;
+  const host=$('#logList'); if(!host) return;
+  const list=[...activeSessionsAsc()].reverse();
+  if(!list.length){ host.innerHTML='<div class="empty">🏋️ No workouts yet.<br>Log your first sets in Train.</div>'; return; }
+  const sigCount=new Map(); const sigs=new Map();
+  for(const s of list){ const sig=sessionSignature(s); sigs.set(s,sig); sigCount.set(sig,(sigCount.get(sig)||0)+1); }
+  const shown=list.slice(0, logVisibleCount);
+  let html='', curMonth='';
+  for(const s of shown){
+    const m=String(s.date).slice(0,7);
+    if(m!==curMonth){ curMonth=m; html+=`<h3 class="log-month">${esc(monthLabel(s.date))}</h3>`; }
+    const similar=sigCount.get(sigs.get(s))-1;
     const ts=updatedAt(s); const time=ts ? new Date(ts).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}) : '';
-    return `<article class="session" data-id="${esc(s.id)}"><div class="row between gap wrap"><div><b>${esc(s.day)}</b><div class="small">Week ${s.week} · ${esc(fmtDate(s.date))} · ${s.exercises.length} exercises${s.meta?.durationMin?` · ${s.meta.durationMin} min`:''}${time?` · saved ${esc(time)}`:''}${similar?` · ${similar} similar`:''}</div></div><div class="log-actions"><button class="btn secondary small" data-open="${esc(s.id)}" type="button" aria-expanded="false">Open</button><button class="btn danger-outline small" data-delete="${esc(s.id)}" type="button">Delete</button></div></div><div class="session-details" hidden>${sessionInfoLine(s)}${s.exercises.map(e=>`<div style="margin-top:8px"><b>${esc(e.name)}</b><div class="small">${e.sets.map(setLabel).join(', ')}</div></div>`).join('')}<div class="grid2" style="margin-top:12px"><button class="btn secondary" data-edit="${esc(s.id)}" type="button">Edit</button><button class="btn danger-outline" data-delete="${esc(s.id)}" type="button">Delete</button></div></div></article>`;
-  }).join('');
+    html+=`<article class="session" data-id="${esc(s.id)}">
+      <button class="session-head" data-open="${esc(s.id)}" type="button" aria-expanded="false">
+        <span class="session-title"><b>${esc(s.day)}</b><span class="small">Week ${s.week} · ${esc(fmtDate(s.date))} · ${s.exercises.length} exercises${s.meta?.durationMin?` · ${s.meta.durationMin} min`:''}${time?` · ${esc(time)}`:''}${similar?` · ${similar} similar`:''}</span></span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10l4 4 4-4"/></svg>
+      </button>
+      <div class="session-details" hidden></div>
+    </article>`;
+  }
+  if(list.length>shown.length) html+=`<button class="btn secondary show-more" data-more type="button">Show ${Math.min(50, list.length-shown.length)} more · ${list.length-shown.length} left</button>`;
+  host.innerHTML=html;
 }
 
 async function deleteSession(id, card=null){
@@ -390,9 +463,7 @@ async function deleteSession(id, card=null){
     queueDelete(id, session);
     unqueueUpsert(id);
     saveLocal();
-    renderHistory();
-    renderProgress();
-    renderSyncChip();
+    dataChanged();
     renderDiagnostics();
     toast(before === state.sessions.length ? 'Workout already removed · cloud delete pending' : 'Workout deleted · cloud delete pending');
     if(state.user){
@@ -415,14 +486,25 @@ function e1rm(s){ return s && s.load>0 ? s.load*(1+s.reps/30) : 0; }
 function bodyweightForSession(session){ return Number(session?.bw)||0; }
 function setVolume(s, name, session){ const bw=isBodyweightExercise(name)?bodyweightForSession(session):0; return ((Number(s.load)||0) + bw) * (Number(s.reps)||0); }
 function metricSet(s, metric){ if(metric==='load') return Number(s.load)||0; if(metric==='reps') return Number(s.reps)||0; if(metric==='e1rm') return e1rm(s); return Number(s.load||0)*Number(s.reps||0); }
-function exerciseEntries(name){ return [...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id))).sort((a,b)=>new Date(a.date)-new Date(b.date)||String(updatedAt(a)||'').localeCompare(String(updatedAt(b)||''))).map(session=>{ const ex=session.exercises.find(e=>e.name===name); if(!ex) return null; const best=bestSet(ex.sets); return {session, date:session.date, name, sets:ex.sets, best, e1rm:e1rm(best), load:Math.max(...ex.sets.map(s=>s.load||0)), reps:Math.max(...ex.sets.map(s=>s.reps||0)), volume:ex.sets.reduce((sum,s)=>sum+setVolume(s,name,session),0)}; }).filter(Boolean); }
-function exerciseNames(){ const set=new Set(); state.sessions.filter(s=>!state.pendingDeletes.has(String(s.id))).forEach(s=>s.exercises.forEach(e=>set.add(e.name))); return [...set]; }
+function exerciseEntries(name){
+  if(entryCache.has(name)) return entryCache.get(name);
+  const out=[];
+  for(const session of activeSessionsAsc()){
+    const ex=session.exercises.find(e=>e.name===name); if(!ex) continue;
+    const best=bestSet(ex.sets);
+    out.push({session, date:session.date, name, sets:ex.sets, best, e1rm:e1rm(best), load:Math.max(...ex.sets.map(s=>s.load||0)), reps:Math.max(...ex.sets.map(s=>s.reps||0)), volume:ex.sets.reduce((sum,s)=>sum+setVolume(s,name,session),0)});
+  }
+  entryCache.set(name, out);
+  return out;
+}
+function exerciseNames(){ if(!namesCache){ const set=new Set(); for(const s of activeSessionsAsc()) for(const e of s.exercises) set.add(e.name); namesCache=[...set].sort((a,b)=>a.localeCompare(b)); } return namesCache; }
 function autoMetric(name){ const hasLoad=exerciseEntries(name).some(e=>e.load>0); const meta=findExerciseMeta(name); if(meta.timed) return 'reps'; return hasLoad ? 'e1rm' : 'reps'; }
 function valueForEntry(e, metric){ if(metric==='load') return e.load; if(metric==='reps') return e.reps; if(metric==='volume') return e.volume; return e.e1rm || e.reps; }
 function unitForMetric(metric){ if(metric==='volume') return 'kg×reps'; if(metric==='reps') return 'reps/sec'; return 'kg'; }
 function allSummaries(){ return exerciseNames().map(name=>summaryForExercise(name)).filter(Boolean); }
-function summaryForExercise(name){ const entries=exerciseEntries(name); if(!entries.length) return null; const metric=autoMetric(name), vals=entries.map(e=>valueForEntry(e,metric)), best=Math.max(...vals), latest=vals[vals.length-1], first=vals[0], change=latest-first, percent=first?change/first*100:0; const lastBestIndex=vals.lastIndexOf(best); const noNewHigh=entries.length-1-lastBestIndex; const recent=vals.slice(-4); const slope=recent.length>=2?recent[recent.length-1]-recent[0]:0; const plateau=entries.length>=4 && (noNewHigh>=3 || (slope<=0 && latest < best*0.98)); return {name, entries:entries.length, metric, unit:unitForMetric(metric), best, latest, first, change, percent, noNewHigh, plateau}; }
+function summaryForExercise(name){ if(summaryCache.has(name)) return summaryCache.get(name); const entries=exerciseEntries(name); let out=null; if(entries.length){ const metric=autoMetric(name), vals=entries.map(e=>valueForEntry(e,metric)), best=Math.max(...vals), latest=vals[vals.length-1], first=vals[0], change=latest-first, percent=first?change/first*100:0; const lastBestIndex=vals.lastIndexOf(best); const noNewHigh=entries.length-1-lastBestIndex; const recent=vals.slice(-4); const slope=recent.length>=2?recent[recent.length-1]-recent[0]:0; const plateau=entries.length>=4 && (noNewHigh>=3 || (slope<=0 && latest < best*0.98)); out={name, entries:entries.length, metric, unit:unitForMetric(metric), best, latest, first, change, percent, noNewHigh, plateau}; } summaryCache.set(name, out); return out; }
 function renderProgress(){
+  dirty.progress=false;
   const names=exerciseNames();
   const sel=$('#progressExercise');
   const previous=sel.value || state.progressExercise || '';
@@ -435,16 +517,70 @@ function renderProgress(){
 function renderOverall(){ $('#progressControls').style.display='none'; $('#viewOverall').classList.add('active'); $('#viewExercise').classList.remove('active'); const sessions=[...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id))).sort((a,b)=>new Date(a.date)-new Date(b.date)); const summaries=allSummaries(); const totalSets=sessions.reduce((sum,s)=>sum+s.exercises.reduce((a,e)=>a+e.sets.length,0),0); const volume=sessions.map(s=>s.exercises.reduce((sum,e)=>sum+e.sets.reduce((a,set)=>a+setVolume(set,e.name,s),0),0)); const weak=summaries.filter(x=>x.plateau); const improving=summaries.filter(x=>x.percent>0); renderStats([['Workouts',sessions.length],['Sets',totalSets],['Improving',improving.length],['Plateaus',weak.length]]); $('#chartTitle').textContent='Overall workload'; $('#chartSubtitle').textContent=sessions.length?`Last ${Math.min(18,sessions.length)} workouts · kg×reps`:''; drawChart(volume, sessions.map(s=>s.date), 'kg×reps'); renderInsights(); $('#listTitle').textContent='Exercise summary'; $('#progressList').innerHTML=summaries.length?summaries.sort((a,b)=>b.percent-a.percent).map(s=>`<div class="progress-row"><div><b>${esc(s.name)}</b><div class="small">${s.entries} logs · best ${round(s.best)} ${esc(s.unit)}</div></div><div class="metric">${s.percent>=0?'+':''}${round(s.percent)}%</div></div>`).join(''):'<div class="empty">No progress yet. Save a workout first.</div>'; }
 function renderExerciseProgress(name){ $('#progressControls').style.display='grid'; $('#viewOverall').classList.remove('active'); $('#viewExercise').classList.add('active'); if(!name){ renderStats([['Best','—'],['Latest','—'],['Change','—'],['Entries',0]]); $('#chartBox').innerHTML='<div class="empty">No chart data.</div>'; renderInsights(); return; } const metric=$('#progressMetric').value==='auto'?autoMetric(name):$('#progressMetric').value; const entries=exerciseEntries(name); const vals=entries.map(e=>valueForEntry(e,metric)); const unit=unitForMetric(metric); const best=vals.length?Math.max(...vals):0, latest=vals[vals.length-1]||0, first=vals[0]||0, change=latest-first; renderStats([['Best',`${round(best)} ${unit}`],['Latest',`${round(latest)} ${unit}`],['Change',`${change>=0?'+':''}${round(change)} ${unit}`],['Entries',entries.length]]); $('#chartTitle').textContent=`${name} · ${metric==='e1rm'?'Estimated 1RM':metric}`; $('#chartSubtitle').textContent=`Last ${Math.min(18, entries.length)} entries`; drawChart(vals, entries.map(e=>e.date), unit); renderInsights(name); $('#listTitle').textContent='Recent entries'; $('#progressList').innerHTML=entries.slice(-12).reverse().map(e=>`<div class="progress-row"><div><b>${esc(fmtDate(e.date))}</b><div class="small">Best set: ${setLabel(e.best)}</div></div><div class="metric">${round(valueForEntry(e,metric))} ${unit}</div></div>`).join('') || '<div class="empty">No entries.</div>'; }
 function renderStats(rows){ $('#statsGrid').innerHTML=rows.map(([l,v])=>`<div class="stat"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join(''); }
-function drawChart(values, labels, unit){ const box=$('#chartBox'); if(!values.length){box.innerHTML='<div class="empty">No chart data.</div>';return;} const n=18, vs=values.slice(-n).map(Number), ls=labels.slice(-n); const minRaw=Math.min(...vs), maxRaw=Math.max(...vs), pad=(maxRaw-minRaw)*.15 || Math.max(1,maxRaw*.15), min=Math.max(0,minRaw-pad), max=maxRaw+pad, span=max-min||1; const left=8,right=94,top=10,bottom=82,w=right-left,h=bottom-top; const pts=vs.map((v,i)=>[vs.length===1?(left+right)/2:left+i/(vs.length-1)*w, bottom-(v-min)/span*h, v]); const poly=pts.map(p=>`${round(p[0])},${round(p[1])}`).join(' '); const area=pts.length>1?`${poly} ${right},${bottom} ${left},${bottom}`:''; box.innerHTML=`<svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Progress chart"><line class="grid-line" x1="${left}" y1="${top}" x2="${right}" y2="${top}"/><line class="grid-line" x1="${left}" y1="46" x2="${right}" y2="46"/><line class="grid-line" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}"/>${pts.length>1?`<polygon class="chart-area" points="${area}"/><polyline class="chart-line" points="${poly}"/>`:''}${pts.map(p=>`<circle class="chart-point" cx="${p[0]}" cy="${p[1]}" r="1.6"><title>${round(p[2])} ${esc(unit)}</title></circle>`).join('')}</svg><div class="chart-note">${esc(shortDate(ls[0]))} → ${esc(shortDate(ls[ls.length-1]))} · ${vs.length} point${vs.length===1?'':'s'} · ${esc(unit)}</div>`; }
+/* Chart is drawn in real pixel space (no viewBox stretching), so points stay round,
+   the line can be smoothed, and axis labels are readable. Redrawn on resize. */
+let lastChart=null;
+function smoothPath(pts){
+  if(pts.length<3) return 'M'+pts.map(p=>`${round(p[0])} ${round(p[1])}`).join(' L ');
+  let d=`M${round(pts[0][0])} ${round(pts[0][1])}`;
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[i-1]||pts[i], p1=pts[i], p2=pts[i+1], p3=pts[i+2]||p2;
+    d+=`C${round(p1[0]+(p2[0]-p0[0])/6)} ${round(p1[1]+(p2[1]-p0[1])/6)} ${round(p2[0]-(p3[0]-p1[0])/6)} ${round(p2[1]-(p3[1]-p1[1])/6)} ${round(p2[0])} ${round(p2[1])}`;
+  }
+  return d;
+}
+function drawChart(values, labels, unit){
+  lastChart={values, labels, unit};
+  const box=$('#chartBox'); if(!box) return;
+  if(!values.length){ box.innerHTML='<div class="empty">No chart data yet.</div>'; return; }
+  const n=18, vs=values.slice(-n).map(Number), ls=labels.slice(-n);
+  const W=Math.max(260, Math.round(box.clientWidth-24)) || 300, H=216;
+  const padL=10, padR=12, padT=30, padB=26, w=W-padL-padR, h=H-padT-padB;
+  const minRaw=Math.min(...vs), maxRaw=Math.max(...vs), pad=(maxRaw-minRaw)*.15 || Math.max(1,maxRaw*.15);
+  const min=Math.max(0,minRaw-pad), max=maxRaw+pad, span=max-min||1;
+  const yOf=v=>padT+(1-(v-min)/span)*h;
+  const pts=vs.map((v,i)=>[vs.length===1?padL+w/2:padL+i/(vs.length-1)*w, yOf(v), v]);
+  const line=smoothPath(pts);
+  const area=pts.length>1?`${line} L ${round(pts[pts.length-1][0])} ${H-padB} L ${round(pts[0][0])} ${H-padB} Z`:'';
+  const gridYs=[[yOf(maxRaw),maxRaw],[yOf(minRaw),minRaw]];
+  const last=pts[pts.length-1];
+  const lastLabelY=last[1]<padT+16 ? last[1]+18 : last[1]-10;
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Progress chart">
+    <defs><linearGradient id="mmArea" x1="0" y1="0" x2="0" y2="1"><stop class="grad-a" offset="0"/><stop class="grad-b" offset="1"/></linearGradient></defs>
+    ${gridYs.map(([y,v],gi)=>`<line class="grid-line" x1="${padL}" y1="${round(y)}" x2="${W-padR}" y2="${round(y)}"/><text class="axis-label" x="${W-padR}" y="${round(y)+(gi?12:-4)}" text-anchor="end">${round(v)}</text>`).join('')}
+    ${pts.length>1?`<path class="chart-area" d="${area}" fill="url(#mmArea)"/><path class="chart-line" d="${line}"/>`:''}
+    ${pts.map((p,i)=>`<circle class="chart-point${i===pts.length-1?' last':''}" cx="${round(p[0])}" cy="${round(p[1])}" r="${i===pts.length-1?4.5:3}" data-v="${round(p[2])}" data-u="${esc(unit)}" data-d="${esc(shortDate(ls[i]))}"><title>${round(p[2])} ${esc(unit)} · ${esc(shortDate(ls[i]))}</title></circle>`).join('')}
+    <text class="chart-value" x="${round(Math.min(Math.max(last[0],26),W-30))}" y="${round(lastLabelY)}" text-anchor="middle">${round(last[2])}</text>
+    <text class="axis-label" x="${padL}" y="${H-8}">${esc(shortDate(ls[0]))}</text>
+    <text class="axis-label" x="${W-padR}" y="${H-8}" text-anchor="end">${esc(shortDate(ls[ls.length-1]))}</text>
+  </svg>`;
+}
 function renderInsights(selected=''){ const sums=allSummaries(); const achievements=sums.filter(x=>x.percent>0).sort((a,b)=>b.percent-a.percent).slice(0,4); const weak=sums.filter(x=>x.plateau).sort((a,b)=>b.noNewHigh-a.noNewHigh||a.percent-b.percent).slice(0,4); $('#recordsPanel').innerHTML='<h2>Records & achievements</h2>'+(achievements.length?achievements.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">Best ${round(x.best)} ${esc(x.unit)} · ${x.entries} entries</div></div><div class="metric">+${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No positive trend yet.</p>'); $('#weakPanel').innerHTML='<h2>Weak points</h2>'+(weak.length?weak.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">No new high for ${x.noNewHigh} entries · latest ${round(x.latest)} ${esc(x.unit)}</div></div><div class="metric">${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No plateau detected.</p>'); }
 
-async function getSupabase(){ if(state.supabase) return state.supabase; if(!window.supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null; state.supabase=window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); return state.supabase; }
+/* The Supabase SDK (~120 KB gz) is injected only when actually needed — a stored auth
+   session exists or the user taps Sign in — instead of being parsed on every startup. */
+let sdkPromise=null;
+function loadSupabaseSdk(){
+  if(window.supabase) return Promise.resolve(true);
+  if(sdkPromise) return sdkPromise;
+  sdkPromise=new Promise(resolve=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    s.async=true;
+    s.onload=()=>resolve(true);
+    s.onerror=()=>{ sdkPromise=null; resolve(false); };
+    document.head.appendChild(s);
+  });
+  return sdkPromise;
+}
+function hasStoredSupabaseSession(){ try{ for(let i=0;i<window.localStorage.length;i++){ const k=window.localStorage.key(i); if(k && k.startsWith('sb-') && k.includes('auth-token')) return true; } }catch(e){} return false; }
+async function getSupabase(){ if(state.supabase) return state.supabase; if(!SUPABASE_URL || !SUPABASE_ANON_KEY) return null; if(!(await loadSupabaseSdk()) || !window.supabase) return null; state.supabase=window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); return state.supabase; }
 function cloudErrorText(error){ return String(error?.message || error?.details || error?.hint || error || ''); }
 function toDb(s){ return {id:String(s.id),user_id:state.user.id,date:s.date,week:s.week,day:s.day,bw:s.bw,notes:s.notes,exercises:s.exercises,meta:s.meta||{},updated_at:updatedAt(s),deleted_at:null}; }
 function fromDb(r){ if(!r || r.deleted_at) return null; return normalizeSession({id:r.id,user_id:r.user_id,date:r.date,week:r.week,day:r.day,bw:r.bw,notes:r.notes,exercises:r.exercises,meta:r.meta||{},updated_at:r.updated_at,deleted_at:r.deleted_at}); }
 function deleteTombstoneRow(id){ const meta=state.deleteMeta[String(id)]||{}; const snap=meta.snapshot||{}; const deletedAtValue=meta.deletedAt||nowIso(); return {id:String(id),user_id:state.user.id,date:snap.date||localDate(),week:clamp(snap.week||1,1,12),day:state.split.includes(snap.day)?snap.day:(state.split[0]||'Full Body'),bw:snap.bw??null,notes:snap.notes||'',exercises:Array.isArray(snap.exercises)?snap.exercises:[],meta:normalizeMeta(snap.meta||{}),updated_at:deletedAtValue,deleted_at:deletedAtValue}; }
-async function initAuth(){ const sb=await getSupabase(); if(!sb){ renderAuth(); renderSyncChip(); return; } const {data}=await sb.auth.getUser(); state.user=data?.user||null; sb.auth.onAuthStateChange((ev,session)=>{ state.user=session?.user||null; renderAuth(); renderSyncChip(); if(state.user) syncNow(false); }); renderAuth(); renderSyncChip(); if(state.user) await syncNow(false); }
-function renderAuth(){ const el=$('#authBox'); if(!el) return; if(state.user){ el.innerHTML=`<h2>${esc(state.user.email||'Signed in')}</h2><div class="grid2" style="margin-top:12px"><button class="btn primary" id="syncNow" type="button">Sync now</button><button class="btn danger-outline" id="signOut" type="button">Sign out</button></div>`; } else { el.innerHTML=`<h2>Cloud sync</h2><div class="grid2" style="margin-top:12px"><label>Email<input id="authEmail" type="email" placeholder="email"></label><label>Password<input id="authPassword" type="password" placeholder="password"></label></div><div class="grid2" style="margin-top:12px"><button class="btn primary" id="signIn" type="button">Sign in</button><button class="btn secondary" id="signUp" type="button">Sign up</button></div>`; } }
+async function initAuth(){ if(!hasStoredSupabaseSession()){ renderAuth(); renderSyncChip(); return; } const sb=await getSupabase(); if(!sb){ renderAuth(); renderSyncChip(); return; } const {data}=await sb.auth.getUser(); state.user=data?.user||null; sb.auth.onAuthStateChange((ev,session)=>{ state.user=session?.user||null; renderAuth(); renderSyncChip(); if(state.user) syncNow(false); }); renderAuth(); renderSyncChip(); if(state.user) await syncNow(false); }
+function renderAuth(){ const el=$('#authBox'); if(!el) return; if(state.user){ const email=state.user.email||'Signed in'; el.innerHTML=`<div class="account-row"><span class="avatar" aria-hidden="true">${esc((email[0]||'?').toUpperCase())}</span><div class="account-id"><b>${esc(email)}</b><span class="small">Synced with Supabase</span></div></div><div class="grid2" style="margin-top:14px"><button class="btn primary" id="syncNow" type="button">Sync Now</button><button class="btn danger-outline" id="signOut" type="button">Sign Out</button></div>`; } else { el.innerHTML=`<h2>Cloud Sync</h2><p class="small" style="margin-top:2px">Sign in to back up workouts and sync across devices.</p><div class="auth-fields" style="margin-top:12px"><label>Email<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••"></label></div><div class="grid2" style="margin-top:12px"><button class="btn primary" id="signIn" type="button">Sign In</button><button class="btn secondary" id="signUp" type="button">Create Account</button></div>`; } }
 function renderSyncChip(){ const chip=$('#syncChip'); if(!chip) return; const offline=typeof navigator!=='undefined' && navigator.onLine===false; const pending=pendingDeleteCount()+pendingUpsertCount(); if(offline){ chip.className='status-pill warn'; chip.textContent=pending?`Offline · ${pending} pending`:'Offline'; return; } chip.className='status-pill '+(state.user?(pending?'warn':'ok'):(pending?'warn':'')); chip.textContent = state.user ? (pending?`Cloud · ${pending} pending`:'Cloud synced') : (pending?`${pending} pending`:'Local'); }
 function setAuthBusy(on){ state.authBusy=!!on; ['signIn','signUp'].forEach(id=>{ const b=$('#'+id); if(b) b.disabled=state.authBusy; }); }
 async function signIn(){ if(state.authBusy) return; const sb=await getSupabase(); if(!sb) return toast('Supabase SDK not loaded'); const email=$('#authEmail')?.value.trim(), password=$('#authPassword')?.value; if(!email||!password) return toast('Enter email and password'); setAuthBusy(true); try{ const {data,error}=await sb.auth.signInWithPassword({email,password}); if(error) return toast(error.message,'danger'); state.user=data.user; renderAuth(); await syncNow(); } finally { setAuthBusy(false); } }
@@ -468,12 +604,15 @@ async function syncNow(show=true){
     if(uploads.length){ const up=await bulkUpsert(uploads.map(toDb)); if(up.ok){ uploads.forEach(s=>state.pendingUpserts.delete(String(s.id))); saveLocal(false); } else ok=false; }
     const pull=await selectCloudRows();
     if(!pull.ok){ ok=false; if(show) toast('Sync failed', 'danger'); return false; }
+    const before=state.sessions;
     state.sessions=mergeSessions(state.sessions,pull.data||[]);
     pruneConfirmedDeletesFromPull(pull.data||[]);
     state.lastSyncAt=nowIso();
     state.lastSyncError=ok?null:state.lastSyncError;
     saveLocal(false);
-    renderSyncChip(); renderDiagnostics(); renderHistory(); renderProgress();
+    const changed=state.sessions.length!==before.length || state.sessions.some((s,i)=>s!==before[i]);
+    if(changed) dataChanged();
+    renderSyncChip(); renderDiagnostics();
     const pending=pendingDeleteCount()+pendingUpsertCount();
     if(show) toast(ok?(pending?`Synced · ${pending} pending`:'Synced'):`Sync pending · ${pending} pending`, ok?'':'danger');
     return ok && pending===0;
@@ -487,7 +626,7 @@ function renderDiagnostics(){ const el=$('#diagnostics'); if(!el) return; const 
 function setAccordion(button, body, open){ if(!button || !body) return; button.setAttribute('aria-expanded', String(open)); const mark=button.querySelector('[data-mark], span'); if(mark) mark.textContent=open?'−':'+'; body.hidden = !open; }
 function toggleSessionInfo(){ state.sessionOpen=!state.sessionOpen; setAccordion($('#sessionToggle'), $('#sessionFields'), state.sessionOpen); }
 function toggleDiagnostics(){ const body=$('#diagnostics'); const btn=$('#diagnosticsToggle'); const open=!!body?.hidden; setAccordion(btn, body, open); }
-async function resetLocalData(){ const ok=await modal({title:'Reset local data?',message:'This clears only this device. Cloud workouts stay in Supabase unless you use Erase all data.',danger:true,confirmText:'Reset local'}); if(!ok) return; state.sessions=[]; state.editId=null; clearDeleteQueue(); clearUpsertQueue(); clearDraft(); store.removeItem(STORE_KEY); saveLocal(); renderApp(); toast('Local data reset'); }
+async function resetLocalData(){ const ok=await modal({title:'Reset local data?',message:'This clears only this device. Cloud workouts stay in Supabase unless you use Erase all data.',danger:true,confirmText:'Reset local'}); if(!ok) return; state.sessions=[]; state.editId=null; invalidateDataCache(); clearDeleteQueue(); clearUpsertQueue(); clearDraft(); store.removeItem(STORE_KEY); saveLocal(); renderApp(); toast('Local data reset'); }
 
 async function eraseAllData(){
   const ok=await modal({title:'Erase all data?',message:state.user?'This marks all cloud workouts deleted in Supabase and removes local data. Type ERASE to continue.':'You are not signed in. This removes only local workouts. Type ERASE to continue.',danger:true,requireText:'ERASE',confirmText:'Erase'});
@@ -506,21 +645,24 @@ async function eraseAllData(){
       cloudOk=false; state.lastSyncError='Supabase SDK not loaded';
     }
   }
-  state.sessions=[]; state.editId=null; clearDraft(); store.removeItem(STORE_KEY);
+  state.sessions=[]; state.editId=null; invalidateDataCache(); clearDraft(); store.removeItem(STORE_KEY);
   if(cloudOk){ clearDeleteQueue(); clearUpsertQueue(); } else { sessionsBeforeClear.forEach(sess=>queueDelete(sess.id, sess)); clearUpsertQueue(); }
   saveLocal(); renderApp(); toast(cloudOk?'All data erased':'Local erased · cloud erase pending', cloudOk?'':'danger');
 }
 function exportJson(){ download('minmax-v13-backup.json', JSON.stringify({app:'MinMax Tracker',version:APP_VERSION,exportedAt:nowIso(),sessions:state.sessions},null,2),'application/json'); }
 function exportCsv(){ const rows=[['date','week','day','bodyweight','exercise','set','load','reps','rir']]; state.sessions.forEach(s=>s.exercises.forEach(e=>e.sets.forEach((set,i)=>rows.push([s.date,s.week,s.day,s.bw??'',e.name,i+1,set.load,set.reps,set.rir??''])))); download('minmax-v13-log.csv','\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\n'),'text/csv;charset=utf-8'); }
 function download(name,content,type){ const a=document.createElement('a'), blob=new Blob([content],{type}); a.href=URL.createObjectURL(blob); a.download=name; a.style.display='none'; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500); }
-async function importJsonFile(file){ try{ const data=JSON.parse(await file.text()); const incoming=(Array.isArray(data)?data:data.sessions||[]).map(normalizeSession).filter(Boolean); if(!incoming.length) return toast('No valid sessions found'); const ok=await modal({title:'Import backup?',message:`Import ${incoming.length} workouts and merge with current local data?`,confirmText:'Import'}); if(!ok) return; incoming.forEach(s=>unqueueDelete(s.id)); state.sessions=mergeSessions(state.sessions,incoming); incoming.forEach(s=>state.pendingUpserts.add(String(s.id))); saveLocal(); renderApp(); if(state.user) syncNow(false); toast('Imported'); }catch(e){ toast('Import failed'); } }
+async function importJsonFile(file){ try{ const data=JSON.parse(await file.text()); const incoming=(Array.isArray(data)?data:data.sessions||[]).map(normalizeSession).filter(Boolean); if(!incoming.length) return toast('No valid sessions found'); const ok=await modal({title:'Import backup?',message:`Import ${incoming.length} workouts and merge with current local data?`,confirmText:'Import'}); if(!ok) return; incoming.forEach(s=>unqueueDelete(s.id)); state.sessions=mergeSessions(state.sessions,incoming); incoming.forEach(s=>state.pendingUpserts.add(String(s.id))); invalidateDataCache(); saveLocal(); renderApp(); if(state.user) syncNow(false); toast('Imported'); }catch(e){ toast('Import failed'); } }
 
 function registerEvents(){
   document.addEventListener('click', async e=>{
     const nav=e.target.closest('[data-nav]'); if(nav) return setPage(nav.dataset.nav);
     const day=e.target.closest('[data-day]'); if(day){ syncOpenBlock(); collectSessionFields(); state.day=day.dataset.day; state.exIndex=firstOpenIndex(); saveLocal(); renderTrain(); return; }
     const quick=e.target.closest('[data-act]'); if(quick){ e.preventDefault(); applyQuick(quick.closest('.set-card'),quick.dataset.act); return; }
-    const open=e.target.closest('[data-open]'); if(open){ e.preventDefault(); e.stopPropagation(); const card=open.closest('.session'); const body=card.querySelector('.session-details'); const willOpen=body.hidden; body.hidden=!willOpen; open.setAttribute('aria-expanded', String(willOpen)); open.textContent = willOpen ? 'Close' : 'Open'; return; }
+    const open=e.target.closest('[data-open]'); if(open){ e.preventDefault(); e.stopPropagation(); const card=open.closest('.session'); const body=card.querySelector('.session-details'); const willOpen=body.hidden; if(willOpen && !body.dataset.ready){ const s=state.sessions.find(x=>String(x.id)===String(open.dataset.open)); body.innerHTML=s?sessionDetailsHtml(s):'<p class="muted">Workout not found.</p>'; body.dataset.ready='1'; } body.hidden=!willOpen; card.classList.toggle('expanded', willOpen); open.setAttribute('aria-expanded', String(willOpen)); return; }
+    const more=e.target.closest('[data-more]'); if(more){ logVisibleCount+=50; renderHistory(); return; }
+    const themeBtn=e.target.closest('[data-theme-pref]'); if(themeBtn){ setTheme(themeBtn.dataset.themePref); saveLocal(false); return; }
+    const pt=e.target.closest('.chart-point'); if(pt && pt.dataset.v){ toast(`${pt.dataset.v} ${pt.dataset.u} · ${pt.dataset.d}`); return; }
     const del=e.target.closest('[data-delete]'); if(del){ e.preventDefault(); e.stopPropagation(); await deleteSession(del.dataset.delete, del.closest('.session')); return; }
     const edit=e.target.closest('[data-edit]'); if(edit){ e.preventDefault(); e.stopPropagation(); editSession(edit.dataset.edit); return; }
     const viewBtn=e.target.closest('#viewOverall,#viewExercise'); if(viewBtn){ state.progressView=viewBtn.dataset.view; state.progressExercise=$('#progressExercise')?.value||state.progressExercise||''; renderProgress(); return; }
@@ -532,14 +674,15 @@ function registerEvents(){
   });
   $('#weekMinus').onclick=()=>shiftWeek(-1); $('#weekPlus').onclick=()=>shiftWeek(1); $('#saveWorkout').onclick=saveWorkout; $('#clearDraft').onclick=confirmClearDraft;
   const pill=$('#restPill'); if(pill) pill.onclick=()=>{ stopRest(); toast('Rest skipped'); };
-  const rirBtn=$('#rirToggle'); if(rirBtn) rirBtn.onclick=()=>{ setShowRir(!state.prefs.showRir); saveLocal(false); };
+  const rirBox=$('#rirToggle'); if(rirBox) rirBox.addEventListener('change', ()=>{ setShowRir(rirBox.checked); saveLocal(false); });
+  let resizeT=null; window.addEventListener('resize', ()=>{ clearTimeout(resizeT); resizeT=setTimeout(()=>{ if(state.page==='progress' && lastChart) drawChart(lastChart.values, lastChart.labels, lastChart.unit); }, 160); });
   document.addEventListener('keydown', e=>{ if(e.key==='Enter' && (e.target.id==='authEmail' || e.target.id==='authPassword')){ e.preventDefault(); signIn(); } });
   window.addEventListener('online', ()=>{ renderSyncChip(); if(state.user && (pendingDeleteCount()+pendingUpsertCount())>0) syncNow(false); });
   window.addEventListener('offline', renderSyncChip);
   window.addEventListener('pagehide', flushDraft);
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') flushDraft(); });
   $('#exerciseList').addEventListener('input', e=>{ const block=e.target.closest('.ex-block'); if(block) updateSetsFor(block); }); ['sDate','sBw','sNotes','sEnergy','sSleep'].forEach(id=>$('#'+id).addEventListener('input', collectSessionFields));
-  $('#progressExercise').onchange=()=>{ state.progressExercise=$('#progressExercise').value; renderExerciseProgress(state.progressExercise); }; $('#progressMetric').onchange=()=>{ state.progressExercise=$('#progressExercise').value||state.progressExercise; renderExerciseProgress(state.progressExercise); }; $('#darkToggle').onclick=()=>{setTheme(document.documentElement.classList.contains('dark')?'light':'dark'); saveLocal();}; $('#exportJson').onclick=exportJson; $('#exportCsv').onclick=exportCsv; $('#importJsonBtn').onclick=()=>$('#importFile').click(); $('#importFile').onchange=e=>{ if(e.target.files[0]) importJsonFile(e.target.files[0]); e.target.value='';}; $('#resetLocal').onclick=resetLocalData; $('#eraseAll').onclick=eraseAllData;
+  $('#progressExercise').onchange=()=>{ state.progressExercise=$('#progressExercise').value; renderExerciseProgress(state.progressExercise); }; $('#progressMetric').onchange=()=>{ state.progressExercise=$('#progressExercise').value||state.progressExercise; renderExerciseProgress(state.progressExercise); }; $('#exportJson').onclick=exportJson; $('#exportCsv').onclick=exportCsv; $('#importJsonBtn').onclick=()=>$('#importFile').click(); $('#importFile').onchange=e=>{ if(e.target.files[0]) importJsonFile(e.target.files[0]); e.target.value='';}; $('#resetLocal').onclick=resetLocalData; $('#eraseAll').onclick=eraseAllData;
 }
 async function registerServiceWorker(){
   if(!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
@@ -550,5 +693,17 @@ async function registerServiceWorker(){
     navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(!hadController){ hadController=true; return; } if(state.swReloading) return; state.swReloading=true; location.reload(); });
   }catch(e){}
 }
-async function init(){ try{ loadProgramSync(); loadLocal(); fillSessionFields(); registerEvents(); renderApp(); setShowRir(state.prefs.showRir); refreshProgram(); await initAuth(); await registerServiceWorker(); }catch(e){ document.body.innerHTML=`<main class="shell"><section class="card"><h1>App failed to load</h1><p class="muted">${esc(e.message)}</p></section></main>`; } }
+/* Startup renders the visible page from local data immediately; program refresh, auth
+   and the service worker are kicked off in the background without blocking first paint. */
+function init(){
+  try{
+    loadProgramSync(); loadLocal(); fillSessionFields(); registerEvents(); renderApp(); setShowRir(state.prefs.showRir);
+  }catch(e){
+    document.body.innerHTML=`<main class="shell"><section class="card"><h1>App failed to load</h1><p class="muted">${esc(e.message)}</p></section></main>`;
+    return;
+  }
+  refreshProgram();
+  initAuth().catch(()=>{ renderAuth(); renderSyncChip(); });
+  registerServiceWorker();
+}
 document.addEventListener('DOMContentLoaded', init);

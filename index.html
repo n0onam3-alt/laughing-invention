@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0a2242">
+  <meta name="theme-color" content="#f2f2f7">
   <meta name="description" content="Mobile-first Min-Max training tracker with Supabase sync.">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -11,19 +11,22 @@
   <title>MinMax Tracker</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="dns-prefetch" href="https://fgeseogicphovwroritm.supabase.co">
   <script>
-  // Apply saved theme before first paint to avoid a white flash in dark mode.
+  // Apply saved theme before first paint to avoid a flash. "auto" (default) follows the system.
   try{
     var mmState = JSON.parse(localStorage.getItem('mm_tracker_v13_1_clean_sync_state') || 'null');
-    if(mmState && mmState.preferences && mmState.preferences.theme === 'dark'){
+    var mmPref = (mmState && mmState.preferences && mmState.preferences.theme) || 'auto';
+    var mmDark = mmPref === 'dark' || (mmPref !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    if(mmDark){
       document.documentElement.classList.add('dark');
       var mmMeta = document.querySelector('meta[name="theme-color"]');
-      if(mmMeta) mmMeta.setAttribute('content', '#081120');
+      if(mmMeta) mmMeta.setAttribute('content', '#000000');
     }
   }catch(e){}
   </script>
-  <link rel="stylesheet" href="src/styles.css?v=16.0.0-essentials">
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="src/styles.css?v=17.0.0-ios">
   <script type="application/json" id="programFallback">{
   "version": "7.0.0",
   "title": "The Min-Max Program",
@@ -375,12 +378,12 @@
     ]
   }
 }</script>
-  <script defer src="src/app.js?v=16.0.0-essentials"></script>
+  <script defer src="src/app.js?v=17.0.0-ios"></script>
 </head>
 <body>
   <noscript><div class="noscript">Enable JavaScript to use MinMax Tracker.</div></noscript>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="modalRoot"></div>
 
   <main id="app" class="shell">
@@ -423,12 +426,12 @@
     </section>
 
     <section id="pageLog" class="page" data-page="log">
-      <header class="hero card compact"><h1>Log</h1><p class="small">Saved workouts</p></header>
+      <header class="hero"><h1>Log</h1><p class="small">Saved workouts</p></header>
       <div id="logList" class="stack"></div>
     </section>
 
     <section id="pageProgress" class="page" data-page="progress">
-      <header class="hero card compact"><h1>Progress</h1></header>
+      <header class="hero"><h1>Progress</h1></header>
       <section class="card compact">
         <div class="segmented" role="tablist" aria-label="Progress view">
           <button id="viewOverall" class="seg active" type="button" data-view="overall">Overall</button>
@@ -449,25 +452,39 @@
     </section>
 
     <section id="pageSettings" class="page" data-page="settings">
-      <header class="hero card compact"><h1>Settings</h1></header>
+      <header class="hero"><h1>Settings</h1></header>
       <section class="card" id="authBox"></section>
+      <h3 class="group-title">Preferences</h3>
+      <section class="card list-group">
+        <div class="row-item">
+          <span class="row-label">Appearance</span>
+          <div class="seg-mini" id="themeSeg" role="group" aria-label="Appearance">
+            <button type="button" data-theme-pref="auto" aria-pressed="false">Auto</button>
+            <button type="button" data-theme-pref="light" aria-pressed="false">Light</button>
+            <button type="button" data-theme-pref="dark" aria-pressed="false">Dark</button>
+          </div>
+        </div>
+        <label class="row-item">
+          <span class="row-label">Show RIR fields</span>
+          <span class="switch"><input id="rirToggle" type="checkbox" role="switch" aria-label="Show RIR fields"></span>
+        </label>
+      </section>
+      <h3 class="group-title">Data</h3>
+      <section class="card list-group">
+        <button id="exportJson" class="row-btn" type="button">Export JSON<span class="row-note">Full backup</span></button>
+        <button id="exportCsv" class="row-btn" type="button">Export CSV<span class="row-note">Spreadsheet</span></button>
+        <button id="importJsonBtn" class="row-btn" type="button">Import Backup<span class="row-note">JSON</span></button>
+        <input id="importFile" type="file" accept="application/json,.json" hidden>
+      </section>
       <section class="card compact">
         <button id="diagnosticsToggle" class="details-toggle" type="button" aria-expanded="false"><span data-mark>+</span><b>Sync diagnostics</b></button>
         <div id="diagnostics" class="diagnostics" hidden></div>
       </section>
-      <section class="card settings-actions">
-        <button id="darkToggle" class="btn secondary" type="button">Dark mode</button>
-        <button id="rirToggle" class="btn secondary" type="button" aria-pressed="false">Show RIR fields</button>
-        <button id="exportJson" class="btn secondary" type="button">Export JSON</button>
-        <button id="exportCsv" class="btn secondary" type="button">Export CSV</button>
-        <button id="importJsonBtn" class="btn secondary" type="button">Import JSON</button>
-        <input id="importFile" type="file" accept="application/json,.json" hidden>
-      </section>
+      <h3 class="group-title danger">Danger Zone</h3>
       <section class="card danger-zone">
-        <h2>Danger zone</h2>
         <p class="muted">Reset clears this device only. Erase removes local and cloud data if signed in.</p>
-        <button id="resetLocal" class="btn danger-outline" type="button">Reset local data</button>
-        <button id="eraseAll" class="btn danger-fill" type="button">Erase all data</button>
+        <button id="resetLocal" class="btn danger-outline" type="button">Reset Local Data</button>
+        <button id="eraseAll" class="btn danger-fill" type="button">Erase All Data</button>
       </section>
     </section>
   </main>
