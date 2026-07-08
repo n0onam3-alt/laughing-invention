@@ -2,6 +2,23 @@
 
 Mobile-first PWA workout tracker for the Min-Max Program.
 
+## v17.1 "confetti"
+Bug fixes:
+- starting the app offline no longer signs you out: auth now restores the session from local
+  storage (`getSession`) instead of requiring a network round-trip (`getUser`), so the
+  back-online auto-sync works again
+- editing a workout now survives a reload — the draft remembers which workout it edits, so a
+  save after a mid-edit refresh updates the original instead of creating a duplicate
+- "Clear" now asks for confirmation when the draft only contains energy/sleep ratings
+- while editing, the save button reads "Update workout" and the Train header shows "editing"
+
+Delight:
+- confetti burst on PRs 🎉
+- milestone celebrations: workout count (1, 10, 25, 50, 100, 250, 500, 1000) and lifetime
+  volume (10 t … 1000 t) get a toast + confetti after the save toast
+- the empty Log rotates a motivational line by day
+- a few Easter eggs are hidden in the app — one of them is whispered in the browser console
+
 ## v17 "ios"
 A full performance + UI pass: the app renders like an iOS app and stays fast with months of logs.
 

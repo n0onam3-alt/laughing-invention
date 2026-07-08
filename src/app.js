@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '17.0.0-ios';
+const APP_VERSION = '17.1.0';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';
@@ -19,7 +19,7 @@ const state = {
   lastSyncAt:null, lastSyncError:null, syncRunning:false, user:null, supabase:null,
   schema:{deletedAt:true, meta:true}, progressView:'overall', progressExercise:'',
   sessionOpen:false, editId:null, saving:false, deleting:false, authBusy:false,
-  prefs:{theme:'auto', showRir:false, usedAutofill:false}, swReloading:false
+  prefs:{theme:'auto', showRir:false, usedAutofill:false, gold:false}, swReloading:false
 };
 
 const $ = (s, r=document) => r.querySelector(s);
@@ -75,6 +75,35 @@ function renderActivePage(){
   else if(state.page==='settings'){ renderDiagnostics(); }
 }
 function haptic(pattern){ try{ navigator.vibrate?.(pattern); }catch(e){} }
+
+/* Confetti burst for PRs, milestones and unlocked secrets. Pure DOM + CSS, no deps;
+   skipped entirely under prefers-reduced-motion (the global reduce rule would freeze it). */
+function confetti(count=28){
+  try{ if(matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(e){}
+  let host=$('#confetti');
+  if(!host){ host=document.createElement('div'); host.id='confetti'; host.setAttribute('aria-hidden','true'); document.body.appendChild(host); }
+  const colors=['#007aff','#34c759','#ff9f0a','#ff3b30','#af52de','#ffd60a'];
+  for(let i=0;i<count;i++){
+    const p=document.createElement('i');
+    const size=6+Math.random()*6, dur=1+Math.random()*.9, delay=Math.random()*.25;
+    p.style.cssText=`left:${Math.random()*100}vw;width:${size}px;height:${size*.45}px;background:${colors[i%colors.length]};animation-duration:${dur}s;animation-delay:${delay}s;--drift:${(Math.random()-.5)*60}px;transform:rotate(${Math.random()*360}deg)`;
+    host.appendChild(p);
+    setTimeout(()=>p.remove(),(dur+delay)*1000+150);
+  }
+}
+
+function lifetimeVolume(){ let t=0; for(const s of activeSessionsAsc()) for(const e of s.exercises) for(const st of e.sets) t+=setVolume(st,e.name,s); return t; }
+const WORKOUT_MARKS={1:'🎉 Workout #1 — the journey begins!',10:'🔥 10 workouts logged. It’s becoming a habit.',25:'💪 25 workouts — quarter century club.',50:'⚡ 50 workouts strong!',100:'🏆 Workout #100 — certified regular.',250:'🦾 250 workouts. Absolute machine.',500:'👑 500 workouts. Legend status.',1000:'🐐 Workout #1000. The GOAT.'};
+const VOLUME_MARKS=[[1000000,'🐋 1,000,000 kg lifetime volume — you’ve out-lifted a blue whale. Several times.'],[500000,'🚀 500,000 kg lifetime volume. Half a million!'],[250000,'🚂 250,000 kg lifetime — a whole locomotive.'],[100000,'🚛 100,000 kg lifetime — that’s a loaded semi-truck.'],[10000,'🐘 10,000 kg lifetime — about two elephants, moved by you.']];
+/* Milestone check for a freshly saved (new) session: workout count first, then lifetime volume thresholds. */
+function milestoneMessage(session){
+  const total=activeSessionsAsc().length;
+  if(WORKOUT_MARKS[total]) return WORKOUT_MARKS[total];
+  const sVol=session.exercises.reduce((a,e)=>a+e.sets.reduce((x,st)=>x+setVolume(st,e.name,session),0),0);
+  const vol=lifetimeVolume();
+  for(const [t,msg] of VOLUME_MARKS){ if(vol>=t && vol-sVol<t) return msg; }
+  return '';
+}
 
 function toast(msg, tone=''){
   const el = $('#toast');
@@ -147,6 +176,8 @@ function applyResolvedTheme(){
   const dark = state.prefs.theme==='dark' || (state.prefs.theme==='auto' && !!themeMedia?.matches);
   document.documentElement.classList.toggle('dark', dark);
   document.body.classList.toggle('dark', dark);
+  document.documentElement.classList.toggle('gold', !!state.prefs.gold);
+  document.body.classList.toggle('gold', !!state.prefs.gold);
   const meta = document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content', dark ? '#000000' : '#f2f2f7');
 }
@@ -155,6 +186,19 @@ function setTheme(pref){
   applyResolvedTheme();
   $$('#themeSeg [data-theme-pref]').forEach(b=>{ const on=b.dataset.themePref===state.prefs.theme; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
 }
+/* 🥚 Champion mode: tap the version row in Settings 7 times to flip the accent to gold. */
+let aboutTaps=0, aboutTapTimer=null;
+function aboutTapped(){
+  aboutTaps++;
+  clearTimeout(aboutTapTimer); aboutTapTimer=setTimeout(()=>{ aboutTaps=0; }, 900);
+  if(aboutTaps<7) return;
+  aboutTaps=0;
+  state.prefs.gold=!state.prefs.gold;
+  applyResolvedTheme(); saveLocal(false); haptic([10,50,10]);
+  if(state.prefs.gold){ confetti(40); toast('🏆 Champion mode unlocked'); }
+  else toast('Champion mode off — back to blue');
+}
+
 function setShowRir(on){
   state.prefs.showRir = !!on;
   $('#exerciseList')?.classList.toggle('advanced', state.prefs.showRir);
@@ -171,7 +215,7 @@ function localStateSnapshot(){
     deleteMeta:state.deleteMeta||{},
     lastSyncAt:state.lastSyncAt,
     lastSyncError:state.lastSyncError,
-    preferences:{theme:state.prefs.theme, showRir:state.prefs.showRir, usedAutofill:state.prefs.usedAutofill},
+    preferences:{theme:state.prefs.theme, showRir:state.prefs.showRir, usedAutofill:state.prefs.usedAutofill, gold:state.prefs.gold},
     week:state.week,
     day:state.day
   };
@@ -181,6 +225,7 @@ function loadLocal(){
   let raw=store.getItem(STORE_KEY), parsed=null;
   if(!raw){ for(const k of LEGACY_KEYS){ raw=store.getItem(k); if(raw) break; } }
   if(raw){ try{ parsed=JSON.parse(raw); }catch(e){ parsed=null; } }
+  state.prefs.gold = !!parsed?.preferences?.gold;
   setTheme(parsed?.preferences?.theme || parsed?.theme || 'auto');
   state.prefs.showRir = !!parsed?.preferences?.showRir;
   state.prefs.usedAutofill = !!parsed?.preferences?.usedAutofill;
@@ -199,6 +244,10 @@ function loadLocal(){
   pruneQueues();
   saveLocal(false);
   try{ const d=JSON.parse(store.getItem(DRAFT_KEY)||'null'); state.draft=d&&typeof d==='object'?{...createDraft(),...d,meta:normalizeMeta(d.meta||{})}:createDraft(); }catch(e){ initDraft(); }
+  // Restore edit mode across reloads — otherwise saving a restored draft duplicates the workout being edited.
+  const draftEdit = state.draft?.editId ? String(state.draft.editId) : null;
+  state.editId = draftEdit && state.sessions.some(s=>String(s.id)===draftEdit) ? draftEdit : null;
+  if(!state.editId && state.draft) delete state.draft.editId;
 }
 /* Draft writes are debounced: state.draft is always current in memory, storage catches up
    after a pause in typing and is flushed when the page is hidden or closed. */
@@ -209,7 +258,7 @@ function cancelDraftSave(){ clearTimeout(draftSaveTimer); draftSaveTimer=null; }
 function clearDraft(){ state.editId=null; initDraft(); cancelDraftSave(); store.removeItem(DRAFT_KEY); stopRest(); state.exIndex=firstOpenIndex(); fillSessionFields(); renderWorkout(); renderTrainStatus(); }
 async function confirmClearDraft(){
   syncOpenBlock(); collectSessionFields();
-  const hasData=Object.keys(state.draft.exercises).length>0 || !!state.draft.notes || state.draft.bw!=null;
+  const hasData=Object.keys(state.draft.exercises).length>0 || !!state.draft.notes || state.draft.bw!=null || state.draft.meta.energy!=null || state.draft.meta.sleep!=null;
   if(hasData){ const ok=await modal({title:'Clear draft?',message:state.editId?'This stops editing and discards the unsaved changes on this device. The saved workout is not affected.':'This removes all unsaved sets and session info on this device. Saved workouts are not affected.',danger:true,confirmText:'Clear draft'}); if(!ok) return; }
   clearDraft(); if(hasData) toast('Draft cleared');
 }
@@ -249,7 +298,7 @@ function setPage(page){
 function renderTrain(){ dirty.train=false; const list=currentExercises(); if(state.exIndex>=list.length) state.exIndex=firstOpenIndex(); $('#weekNumber').textContent=state.week; renderDayTabs(); fillSessionFields(); renderWorkout(); renderTrainStatus(); }
 function renderDayTabs(){ $('#dayTabs').innerHTML = state.split.map(d=>`<button class="chip ${d===state.day?'active':''}" data-day="${esc(d)}" type="button" role="tab" aria-selected="${d===state.day}">${esc(d)}</button>`).join(''); }
 function completedCount(){ return currentExercises().filter(ex => (state.draft.exercises[ex.name]?.sets||[]).some(s=>s.reps>0)).length; }
-function renderTrainStatus(){ const total=currentExercises().length, done=completedCount(); const light=(state.program?.lightWeeks||[]).includes(state.week); $('#trainTitle').textContent=state.day; $('#trainSub').textContent=`${done}/${total} logged${light?' · light week':''}`; $('#workoutProgress').style.width= total ? `${done/total*100}%` : '0%'; }
+function renderTrainStatus(){ const total=currentExercises().length, done=completedCount(); const light=(state.program?.lightWeeks||[]).includes(state.week); $('#trainTitle').textContent=state.day; $('#trainSub').textContent=`${done}/${total} logged${light?' · light week':''}${state.editId?' · editing':''}`; $('#workoutProgress').style.width= total ? `${done/total*100}%` : '0%'; const saveBtn=$('#saveWorkout'); if(saveBtn) saveBtn.textContent=state.editId?'Update workout':'Save workout'; }
 function lastBodyweight(){ const list=activeSessionsAsc(); for(let i=list.length-1;i>=0;i--){ if(Number(list[i].bw)>0) return list[i].bw; } return null; }
 function fillSessionFields(){ const lastBw=lastBodyweight(); $('#sDate').value=state.draft.date||localDate(); $('#sBw').value=state.draft.bw??''; $('#sBw').placeholder=lastBw?`${round(lastBw)} kg`:'kg'; $('#sNotes').value=state.draft.notes||''; $('#sEnergy').value=state.draft.meta.energy??''; $('#sSleep').value=state.draft.meta.sleep??''; }
 function collectSessionFields(){ state.draft.date=$('#sDate').value||localDate(); state.draft.bw=$('#sBw').value===''?null:Math.max(0,Number($('#sBw').value)||0); state.draft.notes=$('#sNotes').value.trim().slice(0,180); state.draft.meta.energy=$('#sEnergy').value?clamp($('#sEnergy').value,1,5):null; state.draft.meta.sleep=$('#sSleep').value?clamp($('#sSleep').value,1,5):null; saveDraft(); }
@@ -377,6 +426,7 @@ async function saveWorkout(){
     }
     const prs=detectPRs(session);
     const idx=state.sessions.findIndex(s=>s.id===session.id);
+    const wasNew=idx<0;
     if(idx>=0) state.sessions[idx]=session; else state.sessions.push(session);
     if(state.pendingDeletes.has(String(session.id))) unqueueDelete(session.id);
     queueUpsert(session.id);
@@ -387,9 +437,12 @@ async function saveWorkout(){
     state.exIndex=firstOpenIndex();
     saveLocal(); dataChanged();
     haptic(prs.length?[15,70,15]:12);
+    if(prs.length) confetti();
+    const milestone=wasNew?milestoneMessage(session):'';
     const prMsg=prs.length?`🏆 PR · ${prs[0]}${prs.length>1?` +${prs.length-1} more`:''} — `:'';
     if(state.user){ const ok=await syncNow(false); toast(ok?`${prMsg}saved & synced`:`${prMsg}saved locally · sync pending`, ok?'':'danger'); }
     else { toast(`${prMsg}saved locally`); }
+    if(milestone) setTimeout(()=>{ toast(milestone); confetti(36); haptic([12,60,12,60,12]); }, 1800);
   } finally {
     state.saving = false;
     if(saveBtn) saveBtn.disabled = false;
@@ -414,7 +467,10 @@ function renderHistory(){
   purgeQueuedLocalDeletes();
   const host=$('#logList'); if(!host) return;
   const list=[...activeSessionsAsc()].reverse();
-  if(!list.length){ host.innerHTML='<div class="empty">🏋️ No workouts yet.<br>Log your first sets in Train.</div>'; return; }
+  if(!list.length){
+    const lines=['Log your first sets in Train.','The best day to start was yesterday.<br>Second best: today.','Every legend’s logbook has a page one.','The iron is patient. It’ll wait — but not forever.'];
+    host.innerHTML=`<div class="empty">🏋️ No workouts yet.<br>${lines[new Date().getDate()%lines.length]}</div>`; return;
+  }
   const sigCount=new Map(); const sigs=new Map();
   for(const s of list){ const sig=sessionSignature(s); sigs.set(s,sig); sigCount.set(sig,(sigCount.get(sig)||0)+1); }
   const shown=list.slice(0, logVisibleCount);
@@ -478,7 +534,7 @@ async function deleteSession(id, card=null){
 }
 
 
-function editSession(id){ const s=state.sessions.find(x=>x.id===id); if(!s) return; state.editId=s.id; state.week=s.week; state.day=s.day; state.exIndex=0; state.draft={date:s.date,bw:s.bw,notes:s.notes,meta:normalizeMeta(s.meta),exercises:Object.fromEntries(s.exercises.map(e=>[e.name,{sets:e.sets}]))}; setPage('train'); renderTrain(); toast('Editing workout'); }
+function editSession(id){ const s=state.sessions.find(x=>x.id===id); if(!s) return; state.editId=s.id; state.week=s.week; state.day=s.day; state.exIndex=0; state.draft={date:s.date,bw:s.bw,notes:s.notes,meta:normalizeMeta(s.meta),exercises:Object.fromEntries(s.exercises.map(e=>[e.name,{sets:e.sets}])),editId:s.id}; flushDraft(); setPage('train'); renderTrain(); toast('Editing workout'); }
 
 function setLabel(s){ const load=Number(s.load)||0, reps=round(s.reps); const base=load>0 ? `${round(load)}×${reps}` : `${reps} ${s.timed?'sec':'reps'}`; return `${base}${s.rir!=null?` · RIR ${s.rir}`:''}`; }
 function bestSet(sets){ return [...sets].sort((a,b)=>{ const av=metricSet(a,'e1rm')||metricSet(a,'reps'); const bv=metricSet(b,'e1rm')||metricSet(b,'reps'); return bv-av; })[0] || null; }
@@ -579,7 +635,7 @@ function cloudErrorText(error){ return String(error?.message || error?.details |
 function toDb(s){ return {id:String(s.id),user_id:state.user.id,date:s.date,week:s.week,day:s.day,bw:s.bw,notes:s.notes,exercises:s.exercises,meta:s.meta||{},updated_at:updatedAt(s),deleted_at:null}; }
 function fromDb(r){ if(!r || r.deleted_at) return null; return normalizeSession({id:r.id,user_id:r.user_id,date:r.date,week:r.week,day:r.day,bw:r.bw,notes:r.notes,exercises:r.exercises,meta:r.meta||{},updated_at:r.updated_at,deleted_at:r.deleted_at}); }
 function deleteTombstoneRow(id){ const meta=state.deleteMeta[String(id)]||{}; const snap=meta.snapshot||{}; const deletedAtValue=meta.deletedAt||nowIso(); return {id:String(id),user_id:state.user.id,date:snap.date||localDate(),week:clamp(snap.week||1,1,12),day:state.split.includes(snap.day)?snap.day:(state.split[0]||'Full Body'),bw:snap.bw??null,notes:snap.notes||'',exercises:Array.isArray(snap.exercises)?snap.exercises:[],meta:normalizeMeta(snap.meta||{}),updated_at:deletedAtValue,deleted_at:deletedAtValue}; }
-async function initAuth(){ if(!hasStoredSupabaseSession()){ renderAuth(); renderSyncChip(); return; } const sb=await getSupabase(); if(!sb){ renderAuth(); renderSyncChip(); return; } const {data}=await sb.auth.getUser(); state.user=data?.user||null; sb.auth.onAuthStateChange((ev,session)=>{ state.user=session?.user||null; renderAuth(); renderSyncChip(); if(state.user) syncNow(false); }); renderAuth(); renderSyncChip(); if(state.user) await syncNow(false); }
+async function initAuth(){ if(!hasStoredSupabaseSession()){ renderAuth(); renderSyncChip(); return; } const sb=await getSupabase(); if(!sb){ renderAuth(); renderSyncChip(); return; } /* getSession reads local storage, so a signed-in user stays signed in when the app starts offline */ const {data}=await sb.auth.getSession(); state.user=data?.session?.user||null; sb.auth.onAuthStateChange((ev,session)=>{ state.user=session?.user||null; renderAuth(); renderSyncChip(); if(state.user) syncNow(false); }); renderAuth(); renderSyncChip(); if(state.user) await syncNow(false); }
 function renderAuth(){ const el=$('#authBox'); if(!el) return; if(state.user){ const email=state.user.email||'Signed in'; el.innerHTML=`<div class="account-row"><span class="avatar" aria-hidden="true">${esc((email[0]||'?').toUpperCase())}</span><div class="account-id"><b>${esc(email)}</b><span class="small">Synced with Supabase</span></div></div><div class="grid2" style="margin-top:14px"><button class="btn primary" id="syncNow" type="button">Sync Now</button><button class="btn danger-outline" id="signOut" type="button">Sign Out</button></div>`; } else { el.innerHTML=`<h2>Cloud Sync</h2><p class="small" style="margin-top:2px">Sign in to back up workouts and sync across devices.</p><div class="auth-fields" style="margin-top:12px"><label>Email<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••"></label></div><div class="grid2" style="margin-top:12px"><button class="btn primary" id="signIn" type="button">Sign In</button><button class="btn secondary" id="signUp" type="button">Create Account</button></div>`; } }
 function renderSyncChip(){ const chip=$('#syncChip'); if(!chip) return; const offline=typeof navigator!=='undefined' && navigator.onLine===false; const pending=pendingDeleteCount()+pendingUpsertCount(); if(offline){ chip.className='status-pill warn'; chip.textContent=pending?`Offline · ${pending} pending`:'Offline'; return; } chip.className='status-pill '+(state.user?(pending?'warn':'ok'):(pending?'warn':'')); chip.textContent = state.user ? (pending?`Cloud · ${pending} pending`:'Cloud synced') : (pending?`${pending} pending`:'Local'); }
 function setAuthBusy(on){ state.authBusy=!!on; ['signIn','signUp'].forEach(id=>{ const b=$('#'+id); if(b) b.disabled=state.authBusy; }); }
@@ -668,6 +724,7 @@ function registerEvents(){
     const viewBtn=e.target.closest('#viewOverall,#viewExercise'); if(viewBtn){ state.progressView=viewBtn.dataset.view; state.progressExercise=$('#progressExercise')?.value||state.progressExercise||''; renderProgress(); return; }
     const head=e.target.closest('.ex-head'); if(head){ toggleExercise(Number(head.dataset.exi)); return; }
     const rest=e.target.closest('[data-rest]'); if(rest){ toggleRest(rest); return; }
+    if(e.target.closest('#aboutRow')){ aboutTapped(); return; }
     if(e.target.closest('#sessionToggle')){ toggleSessionInfo(); return; }
     if(e.target.closest('#diagnosticsToggle')){ toggleDiagnostics(); return; }
     if(e.target.id==='syncNow') return syncNow(); if(e.target.id==='signIn') return signIn(); if(e.target.id==='signUp') return signUp(); if(e.target.id==='signOut') return signOut();
@@ -698,6 +755,8 @@ async function registerServiceWorker(){
 function init(){
   try{
     loadProgramSync(); loadLocal(); fillSessionFields(); registerEvents(); renderApp(); setShowRir(state.prefs.showRir);
+    const av=$('#aboutVersion'); if(av) av.textContent=`v${APP_VERSION}`;
+    try{ console.log('%c🏋️ MinMax Tracker','font-size:15px;font-weight:800;color:#007aff', `v${APP_VERSION} — psst: tap the version row in Settings 7 times.`); }catch(e){}
   }catch(e){
     document.body.innerHTML=`<main class="shell"><section class="card"><h1>App failed to load</h1><p class="muted">${esc(e.message)}</p></section></main>`;
     return;

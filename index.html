@@ -26,7 +26,7 @@
     }
   }catch(e){}
   </script>
-  <link rel="stylesheet" href="src/styles.css?v=17.0.0-ios">
+  <link rel="stylesheet" href="src/styles.css?v=17.1.0">
   <script type="application/json" id="programFallback">{
   "version": "7.0.0",
   "title": "The Min-Max Program",
@@ -378,7 +378,7 @@
     ]
   }
 }</script>
-  <script defer src="src/app.js?v=17.0.0-ios"></script>
+  <script defer src="src/app.js?v=17.1.0"></script>
 </head>
 <body>
   <noscript><div class="noscript">Enable JavaScript to use MinMax Tracker.</div></noscript>
@@ -479,6 +479,10 @@
       <section class="card compact">
         <button id="diagnosticsToggle" class="details-toggle" type="button" aria-expanded="false"><span data-mark>+</span><b>Sync diagnostics</b></button>
         <div id="diagnostics" class="diagnostics" hidden></div>
+      </section>
+      <h3 class="group-title">About</h3>
+      <section class="card list-group">
+        <button id="aboutRow" class="row-btn about-row" type="button">MinMax Tracker<span class="row-note" id="aboutVersion">v17</span></button>
       </section>
       <h3 class="group-title danger">Danger Zone</h3>
       <section class="card danger-zone">

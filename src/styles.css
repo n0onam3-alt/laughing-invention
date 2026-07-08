@@ -415,6 +415,23 @@ html.dark input,html.dark select,body.dark input,body.dark select{
 }
 html.dark input::placeholder,body.dark input::placeholder{color:var(--muted);-webkit-text-fill-color:color-mix(in srgb,var(--muted) 80%,transparent)}
 
+/* ---------- about ---------- */
+.about-row{color:var(--ink);user-select:none;-webkit-user-select:none}
+
+/* ---------- confetti (PRs, milestones, secrets) ---------- */
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:130;overflow:hidden}
+#confetti i{position:absolute;top:-14px;border-radius:2px;opacity:.95;animation:confettiFall linear both}
+@keyframes confettiFall{to{transform:translate(var(--drift,0),105vh) rotate(720deg);opacity:.85}}
+
+/* ---------- 🥚 champion mode (tap the version row 7×) ---------- */
+/* body carries the theme vars too (body.dark), so gold must be set on both html and body */
+html.gold,body.gold{--brand:#c9a227;--brand2:#e9cd6b;--accent:#b8901f;--accentSoft:rgba(201,162,39,.18)}
+html.dark.gold,body.dark.gold{--brand:#ffd60a;--brand2:#ffe066;--accent:#ffd60a;--accentSoft:rgba(255,214,10,.22)}
+/* gold is light — flip the on-accent text dark where white would wash out */
+html.dark.gold .chip.active,html.dark.gold .btn.primary,html.dark.gold .ex-block.open .ex-status,
+html.dark.gold .set-num:active,html.dark.gold .rest-btn.running,html.dark.gold .tech[open] summary::before,
+html.dark.gold .details-toggle[aria-expanded="true"] span{color:#1a1200}
+
 /* ---------- responsive ---------- */
 @media(min-width:640px){
   .shell{padding-top:24px}
