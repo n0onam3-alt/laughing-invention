@@ -2,6 +2,21 @@
 
 Mobile-first PWA workout tracker for the Min-Max Program.
 
+## v17.3 "vault"
+Badge vault (replaces the gold champion mode):
+- 12 secret badges with hidden unlock conditions — locked slots show only "?"
+- full-screen animated reveal with confetti and haptics when one unlocks; multiple unlocks
+  queue up one after another
+- collection grid under Settings → About ("Badge vault · 🏅 x/12") — collect them all
+
+Battery / old-Android performance:
+- Low power mode (Settings → Preferences): disables backdrop-filter blur (the main GPU and
+  battery drain on older Android), confetti, and long transitions; auto-enabled on weak
+  devices (≤2 GB RAM or ≤3 cores), manual toggle always wins
+- rest timer ticks at 500 ms instead of 250 ms, writes to the DOM only when the label
+  changes, and fully stops while the app is hidden — the end time is a timestamp, so the
+  countdown stays accurate and fires the moment you come back
+
 ## v17.2 "coach"
 Smarter numbers:
 - estimated 1RM upgraded: mean of Epley and Brzycki (each is biased alone), with logged RIR

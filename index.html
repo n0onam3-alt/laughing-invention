@@ -26,7 +26,7 @@
     }
   }catch(e){}
   </script>
-  <link rel="stylesheet" href="src/styles.css?v=17.2.0">
+  <link rel="stylesheet" href="src/styles.css?v=17.3.0">
   <script type="application/json" id="programFallback">{
   "version": "7.0.0",
   "title": "The Min-Max Program",
@@ -378,7 +378,7 @@
     ]
   }
 }</script>
-  <script defer src="src/app.js?v=17.2.0"></script>
+  <script defer src="src/app.js?v=17.3.0"></script>
 </head>
 <body>
   <noscript><div class="noscript">Enable JavaScript to use MinMax Tracker.</div></noscript>
@@ -468,6 +468,10 @@
           <span class="row-label">Show RIR fields</span>
           <span class="switch"><input id="rirToggle" type="checkbox" role="switch" aria-label="Show RIR fields"></span>
         </label>
+        <label class="row-item">
+          <span class="row-label">Low power mode</span>
+          <span class="switch"><input id="lowPowerToggle" type="checkbox" role="switch" aria-label="Low power mode"></span>
+        </label>
       </section>
       <h3 class="group-title">Profile</h3>
       <section class="card list-group">
@@ -490,7 +494,9 @@
       </section>
       <h3 class="group-title">About</h3>
       <section class="card list-group">
-        <button id="aboutRow" class="row-btn about-row" type="button">MinMax Tracker<span class="row-note" id="aboutVersion">v17</span></button>
+        <button id="aboutRow" class="row-btn about-row" type="button" aria-expanded="false">Badge vault<span class="row-note" id="badgeCount">🏅 0/12</span></button>
+        <div id="badgePanel" class="badge-grid" hidden></div>
+        <div class="row-item"><span class="row-label">MinMax Tracker</span><span class="row-note" id="aboutVersion">v17</span></div>
       </section>
       <h3 class="group-title danger">Danger Zone</h3>
       <section class="card danger-zone">

@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '17.2.0';
+const APP_VERSION = '17.3.0';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';
@@ -19,7 +19,7 @@ const state = {
   lastSyncAt:null, lastSyncError:null, syncRunning:false, user:null, supabase:null,
   schema:{deletedAt:true, meta:true}, progressView:'overall', progressExercise:'',
   sessionOpen:false, editId:null, saving:false, deleting:false, authBusy:false,
-  prefs:{theme:'auto', showRir:false, usedAutofill:false, gold:false, profile:{height:173, weight:76, age:24, sex:'m'}}, swReloading:false
+  prefs:{theme:'auto', showRir:false, usedAutofill:false, badges:{}, lowPower:false, profile:{height:173, weight:76, age:24, sex:'m'}}, swReloading:false
 };
 
 const $ = (s, r=document) => r.querySelector(s);
@@ -79,6 +79,7 @@ function haptic(pattern){ try{ navigator.vibrate?.(pattern); }catch(e){} }
 /* Confetti burst for PRs, milestones and unlocked secrets. Pure DOM + CSS, no deps;
    skipped entirely under prefers-reduced-motion (the global reduce rule would freeze it). */
 function confetti(count=28){
+  if(state.prefs.lowPower) return;
   try{ if(matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(e){}
   let host=$('#confetti');
   if(!host){ host=document.createElement('div'); host.id='confetti'; host.setAttribute('aria-hidden','true'); document.body.appendChild(host); }
@@ -176,8 +177,6 @@ function applyResolvedTheme(){
   const dark = state.prefs.theme==='dark' || (state.prefs.theme==='auto' && !!themeMedia?.matches);
   document.documentElement.classList.toggle('dark', dark);
   document.body.classList.toggle('dark', dark);
-  document.documentElement.classList.toggle('gold', !!state.prefs.gold);
-  document.body.classList.toggle('gold', !!state.prefs.gold);
   const meta = document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content', dark ? '#000000' : '#f2f2f7');
 }
@@ -186,18 +185,81 @@ function setTheme(pref){
   applyResolvedTheme();
   $$('#themeSeg [data-theme-pref]').forEach(b=>{ const on=b.dataset.themePref===state.prefs.theme; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
 }
-/* 🥚 Champion mode: tap the version row in Settings 7 times to flip the accent to gold. */
-let aboutTaps=0, aboutTapTimer=null;
-function aboutTapped(){
-  aboutTaps++;
-  clearTimeout(aboutTapTimer); aboutTapTimer=setTimeout(()=>{ aboutTaps=0; }, 900);
-  if(aboutTaps<7) return;
-  aboutTaps=0;
-  state.prefs.gold=!state.prefs.gold;
-  applyResolvedTheme(); saveLocal(false); haptic([10,50,10]);
-  if(state.prefs.gold){ confetti(40); toast('🏆 Champion mode unlocked'); }
-  else toast('Champion mode off — back to blue');
+/* 🥚 Badge vault: 12 secret badges. Conditions are never shown — locked slots stay “?”.
+   Checked after every new save; each unlock gets a full-screen reveal with confetti. */
+const BADGES=[
+  {id:'first_blood',  icon:'🩸', name:'First Blood',        line:'The iron tasted you. It wants more.',           check:c=>c.total>=1},
+  {id:'night_stalker',icon:'🦇', name:'Night Stalker',      line:'Trained while the city slept.',                 check:c=>c.hour<5},
+  {id:'dawn_raider',  icon:'🌅', name:'Dawn Raider',        line:'Beat the sun to the fight.',                    check:c=>c.hour>=5&&c.hour<7},
+  {id:'widowmaker',   icon:'💀', name:'Widowmaker',         line:'20 reps. One set. No survivors.',               check:c=>c.maxReps>=20},
+  {id:'plate_goblin', icon:'👺', name:'Plate Goblin',       line:'Double bodyweight on the bar. Feed the greed.', check:c=>c.bw>0&&c.maxLoad>=2*c.bw},
+  {id:'rampage',      icon:'👹', name:'Rampage',            line:'Three PRs in one session. Unhinged.',           check:c=>c.prs>=3},
+  {id:'no_mercy',     icon:'⚔️', name:'No Mercy',           line:'Every exercise executed. Zero skipped.',        check:c=>c.fullDay},
+  {id:'hitman',       icon:'⚡', name:'Hitman',             line:'In. Out. Thirty minutes. Clean job.',           check:c=>c.duration>0&&c.duration<=30&&c.exCount>=4},
+  {id:'undead',       icon:'👻', name:'Back From the Dead', line:'Two weeks in the grave. Rose anyway.',          check:c=>c.gapDays>=14},
+  {id:'grave_digger', icon:'⚰️', name:'Grave Digger',       line:'100 tonnes moved. Keep digging.',               check:c=>c.lifetimeVol>=100000},
+  {id:'centurion',    icon:'🛡️', name:'Centurion',          line:'100 wars logged. Veteran status.',              check:c=>c.total>=100},
+  {id:'annihilator',  icon:'💥', name:'Annihilator',        line:'Whole split crushed in one week.',              check:c=>c.weekSweep}
+];
+function buildBadgeCtx(session, prs){
+  const sessions=activeSessionsAsc();
+  let maxReps=0, maxLoad=0;
+  for(const e of session.exercises) for(const s of e.sets){ if(!s.timed) maxReps=Math.max(maxReps, Number(s.reps)||0); maxLoad=Math.max(maxLoad, Number(s.load)||0); }
+  const dayList=state.program?.days?.[session.day]||[];
+  const names=new Set(session.exercises.map(e=>e.name));
+  const others=sessions.filter(s=>String(s.id)!==String(session.id));
+  let gapDays=0;
+  if(others.length){ const latest=others.reduce((m,s)=>s.date>m?s.date:m, others[0].date); gapDays=Math.round((new Date(session.date)-new Date(latest))/86400000); }
+  return {
+    total:sessions.length,
+    hour:new Date().getHours(),
+    maxReps, maxLoad,
+    bw:Number(session.bw)||Number(lastBodyweight())||Number(state.prefs.profile?.weight)||0,
+    prs:prs.length,
+    fullDay:dayList.length>0 && dayList.filter(x=>!x.optional).every(x=>names.has(x.name)),
+    duration:Number(session.meta?.durationMin)||0,
+    exCount:session.exercises.length,
+    gapDays,
+    lifetimeVol:lifetimeVolume(),
+    weekSweep:state.split.length>=2 && state.split.every(d=>sessions.some(s=>s.day===d && Math.abs(new Date(session.date)-new Date(s.date))<=6.5*86400000))
+  };
 }
+function checkBadges(ctx){
+  const out=[];
+  for(const b of BADGES){
+    if(state.prefs.badges[b.id]) continue;
+    let ok=false; try{ ok=!!b.check(ctx); }catch(e){}
+    if(ok){ state.prefs.badges[b.id]=nowIso(); out.push(b); }
+  }
+  if(out.length){ saveLocal(false); renderBadgeCount(); }
+  return out;
+}
+function showBadge(b, onDone){
+  haptic([20,80,20]); confetti(34);
+  const el=document.createElement('div');
+  el.className='badge-pop';
+  el.innerHTML=`<div class="badge-card" role="alertdialog" aria-label="Badge unlocked: ${esc(b.name)}"><span class="badge-glow" aria-hidden="true"></span><span class="badge-icon">${b.icon}</span><span class="badge-tag">Badge unlocked</span><b class="badge-name">${esc(b.name)}</b><span class="badge-line">${esc(b.line)}</span><span class="badge-hint">Tap to continue</span></div>`;
+  document.body.appendChild(el);
+  let closed=false;
+  const close=()=>{ if(closed) return; closed=true; el.classList.add('out'); setTimeout(()=>{ el.remove(); if(onDone) onDone(); }, 200); };
+  el.addEventListener('click', close);
+  setTimeout(close, 4500);
+}
+function revealBadges(list){ if(!list.length) return; showBadge(list[0], ()=>revealBadges(list.slice(1))); }
+function renderBadgeCount(){ const el=$('#badgeCount'); if(el) el.textContent=`🏅 ${Object.keys(state.prefs.badges).length}/${BADGES.length}`; }
+function renderBadgePanel(){
+  const host=$('#badgePanel'); if(!host) return;
+  const n=Object.keys(state.prefs.badges).length;
+  host.innerHTML=`<p class="small badge-intro">${n===BADGES.length?'All badges collected. You are the final boss.':`${BADGES.length-n} still hidden. Earn them — no hints.`}</p><div class="badge-cells">`+
+    BADGES.map(b=>state.prefs.badges[b.id]
+      ?`<div class="badge-cell unlocked"><span class="b-ico">${b.icon}</span><b>${esc(b.name)}</b><span class="small">${esc(b.line)}</span></div>`
+      :`<div class="badge-cell"><span class="b-ico">?</span><b>???</b><span class="small">Locked</span></div>`).join('')+'</div>';
+}
+function toggleBadgePanel(){ const panel=$('#badgePanel'); const btn=$('#aboutRow'); if(!panel) return; const open=panel.hidden; if(open) renderBadgePanel(); panel.hidden=!open; btn?.setAttribute('aria-expanded', String(open)); }
+
+/* Low power mode: kills backdrop-filter blur (the main GPU/battery drain on old Android),
+   confetti and long transitions. Auto-enabled on weak devices, manual toggle in Settings. */
+function applyLowPower(){ document.body.classList.toggle('lite', !!state.prefs.lowPower); const t=$('#lowPowerToggle'); if(t) t.checked=!!state.prefs.lowPower; }
 
 function renderProfile(){
   const p=state.prefs.profile||{};
@@ -229,7 +291,7 @@ function localStateSnapshot(){
     deleteMeta:state.deleteMeta||{},
     lastSyncAt:state.lastSyncAt,
     lastSyncError:state.lastSyncError,
-    preferences:{theme:state.prefs.theme, showRir:state.prefs.showRir, usedAutofill:state.prefs.usedAutofill, gold:state.prefs.gold, profile:state.prefs.profile},
+    preferences:{theme:state.prefs.theme, showRir:state.prefs.showRir, usedAutofill:state.prefs.usedAutofill, badges:state.prefs.badges, lowPower:state.prefs.lowPower, profile:state.prefs.profile},
     week:state.week,
     day:state.day
   };
@@ -239,7 +301,12 @@ function loadLocal(){
   let raw=store.getItem(STORE_KEY), parsed=null;
   if(!raw){ for(const k of LEGACY_KEYS){ raw=store.getItem(k); if(raw) break; } }
   if(raw){ try{ parsed=JSON.parse(raw); }catch(e){ parsed=null; } }
-  state.prefs.gold = !!parsed?.preferences?.gold;
+  state.prefs.badges={};
+  const savedBadges=parsed?.preferences?.badges;
+  if(savedBadges && typeof savedBadges==='object'){ for(const b of BADGES){ if(savedBadges[b.id]) state.prefs.badges[b.id]=savedBadges[b.id]; } }
+  /* Low power defaults ON for weak hardware: ≤2 GB RAM or ≤3 cores. Manual toggle wins once set. */
+  const weakDevice=(navigator.deviceMemory && navigator.deviceMemory<=2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency<=3);
+  state.prefs.lowPower = parsed?.preferences?.lowPower!=null ? !!parsed.preferences.lowPower : !!weakDevice;
   const prof=parsed?.preferences?.profile||{};
   state.prefs.profile={height:clamp(prof.height||173,120,230), weight:Math.max(30,Number(prof.weight)||76), age:clamp(prof.age||24,10,100), sex:prof.sex==='f'?'f':'m'};
   setTheme(parsed?.preferences?.theme || parsed?.theme || 'auto');
@@ -351,7 +418,7 @@ function renderWorkout(){
 function renderExBody(ex,last){
   const saved=draftSetsFor(ex.name);
   const unitPh = ex.timed?'sec':'reps';
-  const running = !!restInterval && restExName===ex.name;
+  const running = restActive && restExName===ex.name;
   let sets=''; for(let i=0;i<ex.sets;i++){
     const s=saved[i] || {}; const prev=last?.sets?.[i] || null;
     const phLoad = prev && prev.load>0 ? String(round(prev.load)) : 'kg';
@@ -432,13 +499,18 @@ function toggleExercise(i){
 function applyQuick(card, action){ if(!card) return; const block=card.closest('.ex-block'); const name=block?.dataset.ex; if(!name) return; const load=$('[data-field="load"]',card), reps=$('[data-field="reps"]',card), idx=Number(card.dataset.set), last=exerciseEntries(name).slice(-1)[0]?.sets?.[idx] || null; if(action==='same'){ if(!last) return toast('No previous set'); load.value=last.load||''; reps.value=last.reps||''; haptic(8); if(!state.prefs.usedAutofill){ state.prefs.usedAutofill=true; $$('.hint').forEach(h=>h.remove()); saveLocal(false); } } if(action==='clearSet'){ load.value=''; reps.value=''; const rir=$('[data-field="rir"]',card); if(rir) rir.value=''; } updateSetsFor(block); }
 
 /* Rest timer \u2014 parses the plan's rest range, keeps running while you browse, vibrates when done. */
-let restInterval=null, restEndsAt=0, restExName='';
+let restInterval=null, restEndsAt=0, restExName='', restActive=false;
 function parseRestSeconds(rest){ const range=String(rest||'').match(/(\d+)\s*-\s*(\d+)/); const single=String(rest||'').match(/\d+/); const mins=range?Number(range[2]):(single?Number(single[0]):2); return clamp(mins,1,10)*60; }
 function currentRestBtn(){ const block=$('#exerciseList .ex-block.open'); return block && block.dataset.ex===restExName ? $('[data-rest]',block) : null; }
 function restPill(){ return $('#restPill'); }
-function stopRest(){ if(restInterval){ clearInterval(restInterval); restInterval=null; } const b=currentRestBtn(); if(b){ b.classList.remove('running'); const meta=findExerciseMeta(restExName); b.textContent=`Rest ${meta.rest||'2 min'}`; } const pill=restPill(); if(pill) pill.hidden=true; restExName=''; }
-function tickRest(){ const left=Math.max(0,Math.round((restEndsAt-Date.now())/1000)); const label=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`; const b=state.page==='train'?currentRestBtn():null; const pill=restPill(); if(b){ b.textContent=label; if(pill) pill.hidden=true; } else if(pill){ pill.textContent=`Rest ${label}`; pill.hidden=false; } if(left<=0){ stopRest(); try{ navigator.vibrate?.([200,120,200]); }catch(e){} toast('Rest over \u2014 next set'); } }
-function toggleRest(btn){ const block=btn.closest('.ex-block'); const name=block?.dataset.ex; if(!name) return; if(restInterval && restExName===name) return stopRest(); if(restInterval) stopRest(); const meta=findExerciseMeta(name); restExName=name; restEndsAt=Date.now()+parseRestSeconds(meta.rest)*1000; btn.classList.add('running'); tickRest(); restInterval=setInterval(tickRest,250); }
+/* The ticker is separate from the timer: the end time is a timestamp, so the interval can be
+   stopped while the app is hidden (screen off, other tab) and restarted on return without
+   losing accuracy. 500 ms is enough for a 1 s countdown; DOM writes only happen on change. */
+function startRestTicker(){ if(!restInterval){ tickRest(); if(restActive) restInterval=setInterval(tickRest,500); } }
+function stopRestTicker(){ if(restInterval){ clearInterval(restInterval); restInterval=null; } }
+function stopRest(){ stopRestTicker(); const b=currentRestBtn(); if(b){ b.classList.remove('running'); const meta=findExerciseMeta(restExName); b.textContent=`Rest ${meta.rest||'2 min'}`; } const pill=restPill(); if(pill) pill.hidden=true; restActive=false; restExName=''; }
+function tickRest(){ const left=Math.max(0,Math.round((restEndsAt-Date.now())/1000)); const label=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`; const b=state.page==='train'?currentRestBtn():null; const pill=restPill(); if(b){ if(b.textContent!==label) b.textContent=label; if(pill) pill.hidden=true; } else if(pill){ const t=`Rest ${label}`; if(pill.textContent!==t) pill.textContent=t; pill.hidden=false; } if(left<=0){ stopRest(); try{ navigator.vibrate?.([200,120,200]); }catch(e){} toast('Rest over \u2014 next set'); } }
+function toggleRest(btn){ const block=btn.closest('.ex-block'); const name=block?.dataset.ex; if(!name) return; if(restActive && restExName===name) return stopRest(); if(restActive) stopRest(); const meta=findExerciseMeta(name); restExName=name; restActive=true; restEndsAt=Date.now()+parseRestSeconds(meta.rest)*1000; btn.classList.add('running'); startRestTicker(); }
 function shiftWeek(n){ state.week=clamp(state.week+n,1,state.program?.weeks||12); saveLocal(); renderTrainStatus(); $('#weekNumber').textContent=state.week; }
 
 function bestValue(sets){ return Math.max(0,...(sets||[]).map(s=>e1rm(s)||Number(s.reps)||0)); }
@@ -501,6 +573,7 @@ async function saveWorkout(){
     if(state.user){ const ok=await syncNow(false); toast(ok?`${prMsg}saved & synced`:`${prMsg}saved locally · sync pending`, ok?'':'danger'); }
     else { toast(`${prMsg}saved locally`); }
     if(milestone) setTimeout(()=>{ toast(milestone); confetti(36); haptic([12,60,12,60,12]); }, 1800);
+    if(wasNew){ const earned=checkBadges(buildBadgeCtx(session, prs)); if(earned.length) setTimeout(()=>revealBadges(earned), 900); }
   } finally {
     state.saving = false;
     if(saveBtn) saveBtn.disabled = false;
@@ -806,7 +879,7 @@ function registerEvents(){
     const head=e.target.closest('.ex-head'); if(head){ toggleExercise(Number(head.dataset.exi)); return; }
     const rest=e.target.closest('[data-rest]'); if(rest){ toggleRest(rest); return; }
     const sexBtn=e.target.closest('#sexSeg [data-sex]'); if(sexBtn){ state.prefs.profile.sex=sexBtn.dataset.sex==='f'?'f':'m'; renderProfile(); saveLocal(false); dirty.train=true; return; }
-    if(e.target.closest('#aboutRow')){ aboutTapped(); return; }
+    if(e.target.closest('#aboutRow')){ toggleBadgePanel(); return; }
     if(e.target.closest('#sessionToggle')){ toggleSessionInfo(); return; }
     if(e.target.closest('#diagnosticsToggle')){ toggleDiagnostics(); return; }
     if(e.target.id==='syncNow') return syncNow(); if(e.target.id==='signIn') return signIn(); if(e.target.id==='signUp') return signUp(); if(e.target.id==='signOut') return signOut();
@@ -814,13 +887,14 @@ function registerEvents(){
   $('#weekMinus').onclick=()=>shiftWeek(-1); $('#weekPlus').onclick=()=>shiftWeek(1); $('#saveWorkout').onclick=saveWorkout; $('#clearDraft').onclick=confirmClearDraft;
   const pill=$('#restPill'); if(pill) pill.onclick=()=>{ stopRest(); toast('Rest skipped'); };
   const rirBox=$('#rirToggle'); if(rirBox) rirBox.addEventListener('change', ()=>{ setShowRir(rirBox.checked); saveLocal(false); });
+  const lpBox=$('#lowPowerToggle'); if(lpBox) lpBox.addEventListener('change', ()=>{ state.prefs.lowPower=lpBox.checked; applyLowPower(); saveLocal(false); });
   ['pHeight','pWeight','pAge'].forEach(id=>{ const el=$('#'+id); if(el) el.addEventListener('change', ()=>{ collectProfile(); renderProfile(); }); });
   let resizeT=null; window.addEventListener('resize', ()=>{ clearTimeout(resizeT); resizeT=setTimeout(()=>{ if(state.page==='progress' && lastChart) drawChart(lastChart.values, lastChart.labels, lastChart.unit); }, 160); });
   document.addEventListener('keydown', e=>{ if(e.key==='Enter' && (e.target.id==='authEmail' || e.target.id==='authPassword')){ e.preventDefault(); signIn(); } });
   window.addEventListener('online', ()=>{ renderSyncChip(); if(state.user && (pendingDeleteCount()+pendingUpsertCount())>0) syncNow(false); });
   window.addEventListener('offline', renderSyncChip);
   window.addEventListener('pagehide', flushDraft);
-  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') flushDraft(); });
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden'){ flushDraft(); stopRestTicker(); } else if(restActive){ startRestTicker(); } });
   $('#exerciseList').addEventListener('input', e=>{ const block=e.target.closest('.ex-block'); if(block) updateSetsFor(block); }); ['sDate','sBw','sNotes','sEnergy','sSleep'].forEach(id=>$('#'+id).addEventListener('input', collectSessionFields));
   $('#progressExercise').onchange=()=>{ state.progressExercise=$('#progressExercise').value; renderExerciseProgress(state.progressExercise); }; $('#progressMetric').onchange=()=>{ state.progressExercise=$('#progressExercise').value||state.progressExercise; renderExerciseProgress(state.progressExercise); }; $('#exportJson').onclick=exportJson; $('#exportCsv').onclick=exportCsv; $('#importJsonBtn').onclick=()=>$('#importFile').click(); $('#importFile').onchange=e=>{ if(e.target.files[0]) importJsonFile(e.target.files[0]); e.target.value='';}; $('#resetLocal').onclick=resetLocalData; $('#eraseAll').onclick=eraseAllData;
 }
@@ -839,8 +913,8 @@ function init(){
   try{
     loadProgramSync(); loadLocal(); fillSessionFields(); registerEvents(); renderApp(); setShowRir(state.prefs.showRir);
     const av=$('#aboutVersion'); if(av) av.textContent=`v${APP_VERSION}`;
-    renderProfile();
-    try{ console.log('%c🏋️ MinMax Tracker','font-size:15px;font-weight:800;color:#007aff', `v${APP_VERSION} — psst: tap the version row in Settings 7 times.`); }catch(e){}
+    renderProfile(); renderBadgeCount(); applyLowPower();
+    try{ console.log('%c🏋️ MinMax Tracker','font-size:15px;font-weight:800;color:#007aff', `v${APP_VERSION} — ${BADGES.length} secret badges are hidden in here. No hints.`); }catch(e){}
   }catch(e){
     document.body.innerHTML=`<main class="shell"><section class="card"><h1>App failed to load</h1><p class="muted">${esc(e.message)}</p></section></main>`;
     return;
