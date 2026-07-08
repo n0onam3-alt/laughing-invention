@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '17.1.0';
+const APP_VERSION = '17.2.0';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';
@@ -19,7 +19,7 @@ const state = {
   lastSyncAt:null, lastSyncError:null, syncRunning:false, user:null, supabase:null,
   schema:{deletedAt:true, meta:true}, progressView:'overall', progressExercise:'',
   sessionOpen:false, editId:null, saving:false, deleting:false, authBusy:false,
-  prefs:{theme:'auto', showRir:false, usedAutofill:false, gold:false}, swReloading:false
+  prefs:{theme:'auto', showRir:false, usedAutofill:false, gold:false, profile:{height:173, weight:76, age:24, sex:'m'}}, swReloading:false
 };
 
 const $ = (s, r=document) => r.querySelector(s);
@@ -199,6 +199,20 @@ function aboutTapped(){
   else toast('Champion mode off — back to blue');
 }
 
+function renderProfile(){
+  const p=state.prefs.profile||{};
+  const set=(id,v)=>{ const el=$('#'+id); if(el) el.value=v??''; };
+  set('pHeight',p.height); set('pWeight',p.weight); set('pAge',p.age);
+  $$('#sexSeg [data-sex]').forEach(b=>{ const on=b.dataset.sex===p.sex; b.classList.toggle('active',on); b.setAttribute('aria-pressed',String(on)); });
+}
+function collectProfile(){
+  const p=state.prefs.profile;
+  p.height=clamp($('#pHeight')?.value||173,120,230);
+  p.weight=Math.max(30,Number($('#pWeight')?.value)||76);
+  p.age=clamp($('#pAge')?.value||24,10,100);
+  saveLocal(false);
+  dirty.train=true; // goal suggestions depend on profile weight
+}
 function setShowRir(on){
   state.prefs.showRir = !!on;
   $('#exerciseList')?.classList.toggle('advanced', state.prefs.showRir);
@@ -215,7 +229,7 @@ function localStateSnapshot(){
     deleteMeta:state.deleteMeta||{},
     lastSyncAt:state.lastSyncAt,
     lastSyncError:state.lastSyncError,
-    preferences:{theme:state.prefs.theme, showRir:state.prefs.showRir, usedAutofill:state.prefs.usedAutofill, gold:state.prefs.gold},
+    preferences:{theme:state.prefs.theme, showRir:state.prefs.showRir, usedAutofill:state.prefs.usedAutofill, gold:state.prefs.gold, profile:state.prefs.profile},
     week:state.week,
     day:state.day
   };
@@ -226,6 +240,8 @@ function loadLocal(){
   if(!raw){ for(const k of LEGACY_KEYS){ raw=store.getItem(k); if(raw) break; } }
   if(raw){ try{ parsed=JSON.parse(raw); }catch(e){ parsed=null; } }
   state.prefs.gold = !!parsed?.preferences?.gold;
+  const prof=parsed?.preferences?.profile||{};
+  state.prefs.profile={height:clamp(prof.height||173,120,230), weight:Math.max(30,Number(prof.weight)||76), age:clamp(prof.age||24,10,100), sex:prof.sex==='f'?'f':'m'};
   setTheme(parsed?.preferences?.theme || parsed?.theme || 'auto');
   state.prefs.showRir = !!parsed?.preferences?.showRir;
   state.prefs.usedAutofill = !!parsed?.preferences?.usedAutofill;
@@ -300,7 +316,7 @@ function renderDayTabs(){ $('#dayTabs').innerHTML = state.split.map(d=>`<button 
 function completedCount(){ return currentExercises().filter(ex => (state.draft.exercises[ex.name]?.sets||[]).some(s=>s.reps>0)).length; }
 function renderTrainStatus(){ const total=currentExercises().length, done=completedCount(); const light=(state.program?.lightWeeks||[]).includes(state.week); $('#trainTitle').textContent=state.day; $('#trainSub').textContent=`${done}/${total} logged${light?' · light week':''}${state.editId?' · editing':''}`; $('#workoutProgress').style.width= total ? `${done/total*100}%` : '0%'; const saveBtn=$('#saveWorkout'); if(saveBtn) saveBtn.textContent=state.editId?'Update workout':'Save workout'; }
 function lastBodyweight(){ const list=activeSessionsAsc(); for(let i=list.length-1;i>=0;i--){ if(Number(list[i].bw)>0) return list[i].bw; } return null; }
-function fillSessionFields(){ const lastBw=lastBodyweight(); $('#sDate').value=state.draft.date||localDate(); $('#sBw').value=state.draft.bw??''; $('#sBw').placeholder=lastBw?`${round(lastBw)} kg`:'kg'; $('#sNotes').value=state.draft.notes||''; $('#sEnergy').value=state.draft.meta.energy??''; $('#sSleep').value=state.draft.meta.sleep??''; }
+function fillSessionFields(){ const lastBw=lastBodyweight()||state.prefs.profile?.weight; $('#sDate').value=state.draft.date||localDate(); $('#sBw').value=state.draft.bw??''; $('#sBw').placeholder=lastBw?`${round(lastBw)} kg`:'kg'; $('#sNotes').value=state.draft.notes||''; $('#sEnergy').value=state.draft.meta.energy??''; $('#sSleep').value=state.draft.meta.sleep??''; }
 function collectSessionFields(){ state.draft.date=$('#sDate').value||localDate(); state.draft.bw=$('#sBw').value===''?null:Math.max(0,Number($('#sBw').value)||0); state.draft.notes=$('#sNotes').value.trim().slice(0,180); state.draft.meta.energy=$('#sEnergy').value?clamp($('#sEnergy').value,1,5):null; state.draft.meta.sleep=$('#sSleep').value?clamp($('#sSleep').value,1,5):null; saveDraft(); }
 
 /* ---- Logbook view: the whole day as one checklist, one exercise expanded at a time ---- */
@@ -347,13 +363,55 @@ function renderExBody(ex,last){
       <div class="goal-box"><span>Target ${esc(ex.reps)} \u00b7 RIR ${esc(String(ex.rir||'\u2014').replace(/\s+/g,''))}</span>${esc(makeGoal(ex,last))}</div>
       <button class="rest-btn ${running?'running':''}" data-rest type="button" aria-label="Rest timer">${running?'\u2026':'Rest '+esc(ex.rest||'2 min')}</button>
     </div>
-    <p class="last-line">${last?`Last time <b>${last.sets.map(setLabel).map(esc).join(' \u00b7 ')}</b> \u00b7 ${esc(shortDate(last.date))}`:'First session \u2014 set your baseline.'}</p>
+    <p class="last-line">${last?`Last time <b>${last.sets.map(setLabel).map(esc).join(' \u00b7 ')}</b> \u00b7 ${esc(shortDate(last.date))}${last.e1rm>0?` \u00b7 e1RM ${round(last.e1rm)} kg`:''}`:'First session \u2014 set your baseline.'}</p>
     <div class="sets">${sets}</div>
     ${last && !state.prefs.usedAutofill?'<p class="hint">Tap a set number to fill in last time\u2019s numbers.</p>':''}
     <details class="tech"><summary>Technique</summary><div><p><b>Technique:</b> ${esc(ex.note||'\u2014')}</p><p><b>Substitutions:</b> ${(ex.substitutions||[]).map(esc).join(' \u00b7 ')||'\u2014'}</p></div></details>
   </div>`;
 }
-function makeGoal(ex,last){ if(!last) return 'Start clean, log consistent reps.'; const b=last.best; const top=String(ex.reps||'').match(/(\d+)-(\d+)/); if(b.load>0 && top && b.reps>=Number(top[2])) return `Try ${round(b.load+2.5)} kg \u00d7 ${top[1]}`; if(b.load>0) return `Beat ${round(b.load)} kg \u00d7 ${round(b.reps)}`; return `Beat ${round(b.reps)} ${ex.timed?'sec':'reps'}`; }
+/* Starting-weight estimates for the first session of an exercise: typical novice working
+   weights as a fraction of bodyweight (male; ~0.8\u00d7 for female). Fractions are per-implement
+   (per dumbbell / per cable handle) for unilateral moves. Order matters \u2014 specific patterns
+   (leg curl, kickback) must match before generic ones (curl, triceps). */
+const START_FRACTIONS=[
+  [/leg curl/, .4],[/leg extension/, .55],[/leg press/, 1.4],[/calf/, .9],
+  [/hip thrust/, 1.0],[/rdl|deadlift/, .85],[/squat/, .8],
+  [/incline press/, .5],[/chest press|bench press/, .55],
+  [/pulldown/, .6],[/t-bar row|row/, .5],[/shrug/, .8],
+  [/lateral raise/, .08],[/y-raise/, .06],[/reverse pec|rear delt|reverse.*flye/, .3],
+  [/crunch/, .35],[/kickback/, .1],[/triceps/, .18],
+  [/wrist/, .1],[/zottman|hammer/, .12],[/curl/, .14],
+  [/pull-up|chin-up|dead hang/, 0]
+];
+function startingWeight(name){
+  const p=state.prefs.profile||{};
+  const bw=Number(lastBodyweight())||Number(p.weight)||76;
+  const sexAdj=p.sex==='f'?0.8:1;
+  const n=String(name).toLowerCase();
+  for(const [re,frac] of START_FRACTIONS){ if(re.test(n)) return frac?plateRound(bw*frac*sexAdj):0; }
+  return 0;
+}
+/* Goal line: personalized double progression.
+   - no history: bodyweight-scaled starting weight (or a clean-baseline cue)
+   - plateau/regression: 10% reset, rebuild through the rep range
+   - top of the rep range hit: add a plate step, drop back to the bottom of the range
+   - otherwise: same load, one more rep */
+function makeGoal(ex,last){
+  const range=String(ex.reps||'').match(/(\d+)\s*-\s*(\d+)/);
+  const low=range?Number(range[1]):6, high=range?Number(range[2]):10;
+  if(!last){
+    if(ex.timed) return 'Set a baseline hold.';
+    if(isBodyweightExercise(ex.name)) return `Bodyweight \u2014 aim ${low}+ clean reps`;
+    const est=startingWeight(ex.name);
+    return est?`Start ~${est} kg \u00d7 ${low}, leave 3 in the tank`:'Start clean, log consistent reps.';
+  }
+  const b=last.best;
+  if(!(b.load>0)) return `Beat ${round(b.reps)} ${ex.timed?'sec':'reps'}${isBodyweightExercise(ex.name)&&!ex.timed?` \u2014 add weight past ${high}`:''}`;
+  const sum=summaryForExercise(ex.name);
+  if(sum && (sum.plateau||sum.regressing)) return `Reset: ${plateRound(b.load*0.9)} kg \u00d7 ${high}, then climb`;
+  if(b.reps>=high) return `Go up: ${plateRound(b.load+(b.load>=60?2.5:1.25))} kg \u00d7 ${low}`;
+  return `Aim ${round(b.load)} kg \u00d7 ${Math.min(high, Math.floor(b.reps)+1)}`;
+}
 function updateSetsFor(block){
   if(!block) return;
   const name=block.dataset.ex; const meta=findExerciseMeta(name); const sets=[];
@@ -538,7 +596,30 @@ function editSession(id){ const s=state.sessions.find(x=>x.id===id); if(!s) retu
 
 function setLabel(s){ const load=Number(s.load)||0, reps=round(s.reps); const base=load>0 ? `${round(load)}×${reps}` : `${reps} ${s.timed?'sec':'reps'}`; return `${base}${s.rir!=null?` · RIR ${s.rir}`:''}`; }
 function bestSet(sets){ return [...sets].sort((a,b)=>{ const av=metricSet(a,'e1rm')||metricSet(a,'reps'); const bv=metricSet(b,'e1rm')||metricSet(b,'reps'); return bv-av; })[0] || null; }
-function e1rm(s){ return s && s.load>0 ? s.load*(1+s.reps/30) : 0; }
+/* Estimated 1RM: mean of Epley and Brzycki (Epley alone overshoots at high reps, Brzycki
+   undershoots), with logged RIR folded in as reps-in-the-tank — a set of 8 @ RIR 2 reflects
+   the same strength as 10 to failure. Reps capped where the formulas stay reliable. */
+function e1rm(s){
+  const load=Number(s?.load)||0;
+  if(load<=0) return 0;
+  let reps=Math.min(Number(s.reps)||0, 15);
+  if(s.rir!=null && s.rir!=='') reps=Math.min(reps + clamp(s.rir,0,4), 16);
+  if(reps<=0) return 0;
+  if(reps===1) return load;
+  return (load*(1+reps/30) + load*36/(37-reps)) / 2;
+}
+/* Least-squares slope over the last 6 entries, as % of their mean per entry —
+   a noise-tolerant trend signal for plateau/regression detection. */
+function trendSlope(vals){
+  const v=vals.slice(-6), n=v.length;
+  if(n<3) return 0;
+  const mx=(n-1)/2, my=v.reduce((a,b)=>a+b,0)/n;
+  let num=0, den=0;
+  for(let i=0;i<n;i++){ num+=(i-mx)*(v[i]-my); den+=(i-mx)*(i-mx); }
+  const slope=den?num/den:0;
+  return my?slope/my*100:0;
+}
+function plateRound(v){ v=Math.max(0,Number(v)||0); const step=v>=20?2.5:1.25; return Math.round(v/step)*step; }
 function bodyweightForSession(session){ return Number(session?.bw)||0; }
 function setVolume(s, name, session){ const bw=isBodyweightExercise(name)?bodyweightForSession(session):0; return ((Number(s.load)||0) + bw) * (Number(s.reps)||0); }
 function metricSet(s, metric){ if(metric==='load') return Number(s.load)||0; if(metric==='reps') return Number(s.reps)||0; if(metric==='e1rm') return e1rm(s); return Number(s.load||0)*Number(s.reps||0); }
@@ -558,7 +639,7 @@ function autoMetric(name){ const hasLoad=exerciseEntries(name).some(e=>e.load>0)
 function valueForEntry(e, metric){ if(metric==='load') return e.load; if(metric==='reps') return e.reps; if(metric==='volume') return e.volume; return e.e1rm || e.reps; }
 function unitForMetric(metric){ if(metric==='volume') return 'kg×reps'; if(metric==='reps') return 'reps/sec'; return 'kg'; }
 function allSummaries(){ return exerciseNames().map(name=>summaryForExercise(name)).filter(Boolean); }
-function summaryForExercise(name){ if(summaryCache.has(name)) return summaryCache.get(name); const entries=exerciseEntries(name); let out=null; if(entries.length){ const metric=autoMetric(name), vals=entries.map(e=>valueForEntry(e,metric)), best=Math.max(...vals), latest=vals[vals.length-1], first=vals[0], change=latest-first, percent=first?change/first*100:0; const lastBestIndex=vals.lastIndexOf(best); const noNewHigh=entries.length-1-lastBestIndex; const recent=vals.slice(-4); const slope=recent.length>=2?recent[recent.length-1]-recent[0]:0; const plateau=entries.length>=4 && (noNewHigh>=3 || (slope<=0 && latest < best*0.98)); out={name, entries:entries.length, metric, unit:unitForMetric(metric), best, latest, first, change, percent, noNewHigh, plateau}; } summaryCache.set(name, out); return out; }
+function summaryForExercise(name){ if(summaryCache.has(name)) return summaryCache.get(name); const entries=exerciseEntries(name); let out=null; if(entries.length){ const metric=autoMetric(name), vals=entries.map(e=>valueForEntry(e,metric)), best=Math.max(...vals), latest=vals[vals.length-1], first=vals[0], change=latest-first, percent=first?change/first*100:0; const lastBestIndex=vals.lastIndexOf(best); const noNewHigh=entries.length-1-lastBestIndex; const trend=trendSlope(vals); const plateau=entries.length>=4 && noNewHigh>=3 && trend<0.35; const regressing=entries.length>=5 && trend<=-1 && latest<best*0.97; out={name, entries:entries.length, metric, unit:unitForMetric(metric), best, latest, first, change, percent, noNewHigh, trend, plateau, regressing}; } summaryCache.set(name, out); return out; }
 function renderProgress(){
   dirty.progress=false;
   const names=exerciseNames();
@@ -570,7 +651,7 @@ function renderProgress(){
   if(state.progressView==='overall') renderOverall(); else renderExerciseProgress(state.progressExercise);
 }
 
-function renderOverall(){ $('#progressControls').style.display='none'; $('#viewOverall').classList.add('active'); $('#viewExercise').classList.remove('active'); const sessions=[...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id))).sort((a,b)=>new Date(a.date)-new Date(b.date)); const summaries=allSummaries(); const totalSets=sessions.reduce((sum,s)=>sum+s.exercises.reduce((a,e)=>a+e.sets.length,0),0); const volume=sessions.map(s=>s.exercises.reduce((sum,e)=>sum+e.sets.reduce((a,set)=>a+setVolume(set,e.name,s),0),0)); const weak=summaries.filter(x=>x.plateau); const improving=summaries.filter(x=>x.percent>0); renderStats([['Workouts',sessions.length],['Sets',totalSets],['Improving',improving.length],['Plateaus',weak.length]]); $('#chartTitle').textContent='Overall workload'; $('#chartSubtitle').textContent=sessions.length?`Last ${Math.min(18,sessions.length)} workouts · kg×reps`:''; drawChart(volume, sessions.map(s=>s.date), 'kg×reps'); renderInsights(); $('#listTitle').textContent='Exercise summary'; $('#progressList').innerHTML=summaries.length?summaries.sort((a,b)=>b.percent-a.percent).map(s=>`<div class="progress-row"><div><b>${esc(s.name)}</b><div class="small">${s.entries} logs · best ${round(s.best)} ${esc(s.unit)}</div></div><div class="metric">${s.percent>=0?'+':''}${round(s.percent)}%</div></div>`).join(''):'<div class="empty">No progress yet. Save a workout first.</div>'; }
+function renderOverall(){ $('#progressControls').style.display='none'; $('#viewOverall').classList.add('active'); $('#viewExercise').classList.remove('active'); const sessions=[...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id))).sort((a,b)=>new Date(a.date)-new Date(b.date)); const summaries=allSummaries(); const totalSets=sessions.reduce((sum,s)=>sum+s.exercises.reduce((a,e)=>a+e.sets.length,0),0); const volume=sessions.map(s=>s.exercises.reduce((sum,e)=>sum+e.sets.reduce((a,set)=>a+setVolume(set,e.name,s),0),0)); const weak=summaries.filter(x=>x.plateau||x.regressing); const improving=summaries.filter(x=>x.percent>0); renderStats([['Workouts',sessions.length],['Sets',totalSets],['Improving',improving.length],['Plateaus',weak.length]]); $('#chartTitle').textContent='Overall workload'; $('#chartSubtitle').textContent=sessions.length?`Last ${Math.min(18,sessions.length)} workouts · kg×reps`:''; drawChart(volume, sessions.map(s=>s.date), 'kg×reps'); renderInsights(); $('#listTitle').textContent='Exercise summary'; $('#progressList').innerHTML=summaries.length?summaries.sort((a,b)=>b.percent-a.percent).map(s=>`<div class="progress-row"><div><b>${esc(s.name)}</b><div class="small">${s.entries} logs · best ${round(s.best)} ${esc(s.unit)}</div></div><div class="metric">${s.percent>=0?'+':''}${round(s.percent)}%</div></div>`).join(''):'<div class="empty">No progress yet. Save a workout first.</div>'; }
 function renderExerciseProgress(name){ $('#progressControls').style.display='grid'; $('#viewOverall').classList.remove('active'); $('#viewExercise').classList.add('active'); if(!name){ renderStats([['Best','—'],['Latest','—'],['Change','—'],['Entries',0]]); $('#chartBox').innerHTML='<div class="empty">No chart data.</div>'; renderInsights(); return; } const metric=$('#progressMetric').value==='auto'?autoMetric(name):$('#progressMetric').value; const entries=exerciseEntries(name); const vals=entries.map(e=>valueForEntry(e,metric)); const unit=unitForMetric(metric); const best=vals.length?Math.max(...vals):0, latest=vals[vals.length-1]||0, first=vals[0]||0, change=latest-first; renderStats([['Best',`${round(best)} ${unit}`],['Latest',`${round(latest)} ${unit}`],['Change',`${change>=0?'+':''}${round(change)} ${unit}`],['Entries',entries.length]]); $('#chartTitle').textContent=`${name} · ${metric==='e1rm'?'Estimated 1RM':metric}`; $('#chartSubtitle').textContent=`Last ${Math.min(18, entries.length)} entries`; drawChart(vals, entries.map(e=>e.date), unit); renderInsights(name); $('#listTitle').textContent='Recent entries'; $('#progressList').innerHTML=entries.slice(-12).reverse().map(e=>`<div class="progress-row"><div><b>${esc(fmtDate(e.date))}</b><div class="small">Best set: ${setLabel(e.best)}</div></div><div class="metric">${round(valueForEntry(e,metric))} ${unit}</div></div>`).join('') || '<div class="empty">No entries.</div>'; }
 function renderStats(rows){ $('#statsGrid').innerHTML=rows.map(([l,v])=>`<div class="stat"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join(''); }
 /* Chart is drawn in real pixel space (no viewBox stretching), so points stay round,
@@ -611,7 +692,7 @@ function drawChart(values, labels, unit){
     <text class="axis-label" x="${W-padR}" y="${H-8}" text-anchor="end">${esc(shortDate(ls[ls.length-1]))}</text>
   </svg>`;
 }
-function renderInsights(selected=''){ const sums=allSummaries(); const achievements=sums.filter(x=>x.percent>0).sort((a,b)=>b.percent-a.percent).slice(0,4); const weak=sums.filter(x=>x.plateau).sort((a,b)=>b.noNewHigh-a.noNewHigh||a.percent-b.percent).slice(0,4); $('#recordsPanel').innerHTML='<h2>Records & achievements</h2>'+(achievements.length?achievements.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">Best ${round(x.best)} ${esc(x.unit)} · ${x.entries} entries</div></div><div class="metric">+${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No positive trend yet.</p>'); $('#weakPanel').innerHTML='<h2>Weak points</h2>'+(weak.length?weak.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">No new high for ${x.noNewHigh} entries · latest ${round(x.latest)} ${esc(x.unit)}</div></div><div class="metric">${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No plateau detected.</p>'); }
+function renderInsights(selected=''){ const sums=allSummaries(); const achievements=sums.filter(x=>x.percent>0).sort((a,b)=>b.percent-a.percent).slice(0,4); const weak=sums.filter(x=>x.plateau||x.regressing).sort((a,b)=>b.noNewHigh-a.noNewHigh||a.percent-b.percent).slice(0,4); $('#recordsPanel').innerHTML='<h2>Records & achievements</h2>'+(achievements.length?achievements.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">Best ${round(x.best)} ${esc(x.unit)} · ${x.entries} entries</div></div><div class="metric">+${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No positive trend yet.</p>'); $('#weakPanel').innerHTML='<h2>Weak points</h2>'+(weak.length?weak.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">${x.regressing?'Trending down':`No new high for ${x.noNewHigh} entries`} · latest ${round(x.latest)} ${esc(x.unit)}</div></div><div class="metric">${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No plateau detected.</p>'); }
 
 /* The Supabase SDK (~120 KB gz) is injected only when actually needed — a stored auth
    session exists or the user taps Sign in — instead of being parsed on every startup. */
@@ -679,7 +760,7 @@ async function syncNow(show=true){
   }
 }
 function renderDiagnostics(){ const el=$('#diagnostics'); if(!el) return; const rows=[['Mode',state.user?'Cloud':'Local only'],['Local workouts',state.sessions.filter(s=>!state.pendingDeletes.has(String(s.id))).length],['Pending uploads',pendingUpsertCount()],['Pending deletes',pendingDeleteCount()],['Last sync',state.lastSyncAt?new Date(state.lastSyncAt).toLocaleString():'Never'],['Schema','soft-delete clean sync'],['Last error',state.lastSyncError||'—']]; el.innerHTML=rows.map(([k,v])=>`<div class="diag-row"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join(''); renderSyncChip(); }
-function setAccordion(button, body, open){ if(!button || !body) return; button.setAttribute('aria-expanded', String(open)); const mark=button.querySelector('[data-mark], span'); if(mark) mark.textContent=open?'−':'+'; body.hidden = !open; }
+function setAccordion(button, body, open){ if(!button || !body) return; button.setAttribute('aria-expanded', String(open)); body.hidden = !open; }
 function toggleSessionInfo(){ state.sessionOpen=!state.sessionOpen; setAccordion($('#sessionToggle'), $('#sessionFields'), state.sessionOpen); }
 function toggleDiagnostics(){ const body=$('#diagnostics'); const btn=$('#diagnosticsToggle'); const open=!!body?.hidden; setAccordion(btn, body, open); }
 async function resetLocalData(){ const ok=await modal({title:'Reset local data?',message:'This clears only this device. Cloud workouts stay in Supabase unless you use Erase all data.',danger:true,confirmText:'Reset local'}); if(!ok) return; state.sessions=[]; state.editId=null; invalidateDataCache(); clearDeleteQueue(); clearUpsertQueue(); clearDraft(); store.removeItem(STORE_KEY); saveLocal(); renderApp(); toast('Local data reset'); }
@@ -724,6 +805,7 @@ function registerEvents(){
     const viewBtn=e.target.closest('#viewOverall,#viewExercise'); if(viewBtn){ state.progressView=viewBtn.dataset.view; state.progressExercise=$('#progressExercise')?.value||state.progressExercise||''; renderProgress(); return; }
     const head=e.target.closest('.ex-head'); if(head){ toggleExercise(Number(head.dataset.exi)); return; }
     const rest=e.target.closest('[data-rest]'); if(rest){ toggleRest(rest); return; }
+    const sexBtn=e.target.closest('#sexSeg [data-sex]'); if(sexBtn){ state.prefs.profile.sex=sexBtn.dataset.sex==='f'?'f':'m'; renderProfile(); saveLocal(false); dirty.train=true; return; }
     if(e.target.closest('#aboutRow')){ aboutTapped(); return; }
     if(e.target.closest('#sessionToggle')){ toggleSessionInfo(); return; }
     if(e.target.closest('#diagnosticsToggle')){ toggleDiagnostics(); return; }
@@ -732,6 +814,7 @@ function registerEvents(){
   $('#weekMinus').onclick=()=>shiftWeek(-1); $('#weekPlus').onclick=()=>shiftWeek(1); $('#saveWorkout').onclick=saveWorkout; $('#clearDraft').onclick=confirmClearDraft;
   const pill=$('#restPill'); if(pill) pill.onclick=()=>{ stopRest(); toast('Rest skipped'); };
   const rirBox=$('#rirToggle'); if(rirBox) rirBox.addEventListener('change', ()=>{ setShowRir(rirBox.checked); saveLocal(false); });
+  ['pHeight','pWeight','pAge'].forEach(id=>{ const el=$('#'+id); if(el) el.addEventListener('change', ()=>{ collectProfile(); renderProfile(); }); });
   let resizeT=null; window.addEventListener('resize', ()=>{ clearTimeout(resizeT); resizeT=setTimeout(()=>{ if(state.page==='progress' && lastChart) drawChart(lastChart.values, lastChart.labels, lastChart.unit); }, 160); });
   document.addEventListener('keydown', e=>{ if(e.key==='Enter' && (e.target.id==='authEmail' || e.target.id==='authPassword')){ e.preventDefault(); signIn(); } });
   window.addEventListener('online', ()=>{ renderSyncChip(); if(state.user && (pendingDeleteCount()+pendingUpsertCount())>0) syncNow(false); });
@@ -756,6 +839,7 @@ function init(){
   try{
     loadProgramSync(); loadLocal(); fillSessionFields(); registerEvents(); renderApp(); setShowRir(state.prefs.showRir);
     const av=$('#aboutVersion'); if(av) av.textContent=`v${APP_VERSION}`;
+    renderProfile();
     try{ console.log('%c🏋️ MinMax Tracker','font-size:15px;font-weight:800;color:#007aff', `v${APP_VERSION} — psst: tap the version row in Settings 7 times.`); }catch(e){}
   }catch(e){
     document.body.innerHTML=`<main class="shell"><section class="card"><h1>App failed to load</h1><p class="muted">${esc(e.message)}</p></section></main>`;

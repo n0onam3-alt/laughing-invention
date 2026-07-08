@@ -2,6 +2,25 @@
 
 Mobile-first PWA workout tracker for the Min-Max Program.
 
+## v17.2 "coach"
+Smarter numbers:
+- estimated 1RM upgraded: mean of Epley and Brzycki (each is biased alone), with logged RIR
+  counted as reps-in-the-tank — 8 reps @ RIR 2 scores like 10 to failure
+- plateau detection rebuilt on a least-squares trend over the last 6 entries; separate
+  "trending down" (regression) state shown in Weak points
+- personalized goal line (double progression): first-session starting weights estimated from
+  your bodyweight per movement pattern, "+1 rep" targets inside the rep range, plate-rounded
+  load jumps at the top of the range, and a 10% reset when plateaued
+- new Profile section in Settings (height / weight / age / sex) feeding the estimates;
+  logged bodyweight takes priority over the profile weight
+- e1RM shown in the "Last time" line of every loaded exercise
+
+UI:
+- week stepper and detail accordions use proper chevron arrows instead of +/− glyphs
+- Technique toggle chevron rotates open/closed
+- "liquid glass" save bar and tab bar: more translucency, stronger blur/saturation and a
+  specular top rim in both themes
+
 ## v17.1 "confetti"
 Bug fixes:
 - starting the app offline no longer signs you out: auth now restores the session from local

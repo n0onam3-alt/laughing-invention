@@ -14,7 +14,8 @@
   --good:#34c759; --goodBg:rgba(52,199,89,.14);
   --warn:#c93400; --warnBg:rgba(255,149,0,.15);
   --danger:#ff3b30; --dangerBg:rgba(255,59,48,.12);
-  --glass:rgba(255,255,255,.72);
+  --glass:rgba(255,255,255,.55);
+  --glass-rim:rgba(255,255,255,.65);
   --thumb:#ffffff;
   --shadow:0 1px 1px rgba(0,0,0,.03), 0 8px 24px rgba(0,0,0,.06);
   --r-lg:20px; --r-md:14px; --r-sm:10px;
@@ -30,7 +31,8 @@ html.dark, body.dark{
   --good:#30d158; --goodBg:rgba(48,209,88,.18);
   --warn:#ff9f0a; --warnBg:rgba(255,159,10,.18);
   --danger:#ff453a; --dangerBg:rgba(255,69,58,.18);
-  --glass:rgba(22,22,24,.72);
+  --glass:rgba(28,28,32,.5);
+  --glass-rim:rgba(255,255,255,.14);
   --thumb:#636366;
   --shadow:0 10px 30px rgba(0,0,0,.5);
 }
@@ -123,6 +125,7 @@ label input,label select{margin-top:6px}
 .trainbar-top h1{font-size:26px}
 .week-mini{display:flex;align-items:center;gap:2px;background:var(--fill);border-radius:999px;padding:3px}
 .week-mini button{width:36px;height:36px;border:0;border-radius:999px;background:transparent;color:var(--accent);font-size:20px;font-weight:600;display:grid;place-items:center;transition:background .13s ease,transform .13s ease}
+.week-mini button svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 .week-mini button:active{background:var(--thumb);transform:scale(.92)}
 .week-mini span{min-width:44px;text-align:center;font-weight:600;font-size:13px;color:var(--muted)}
 .week-mini b{color:var(--ink);font-weight:800;font-size:16px;font-variant-numeric:tabular-nums}
@@ -197,8 +200,8 @@ label input,label select{margin-top:6px}
 .tech{border-top:1px solid var(--line);margin-top:12px;padding-top:4px}
 .tech summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:9px;padding:9px 0;font-weight:600;font-size:14px;color:var(--muted);-webkit-tap-highlight-color:transparent}
 .tech summary::-webkit-details-marker{display:none}
-.tech summary::before{content:'+';width:25px;height:25px;border-radius:999px;background:var(--fill);display:grid;place-items:center;font-weight:600;color:var(--accent)}
-.tech[open] summary::before{content:'\2212';background:var(--accent);color:#fff}
+.tech summary::before{content:'\203A';width:25px;height:25px;border-radius:999px;background:var(--fill);display:grid;place-items:center;font-weight:700;font-size:16px;color:var(--accent);transform:rotate(90deg);transition:transform .2s ease,background .15s ease,color .15s ease}
+.tech[open] summary::before{transform:rotate(-90deg);background:var(--accent);color:#fff}
 .tech div{color:var(--muted);font-size:14px;font-weight:400;line-height:1.45;padding:2px 0 6px;display:grid;gap:6px}
 .tech b{color:var(--ink);font-weight:600}
 
@@ -232,7 +235,9 @@ label input,label select{margin-top:6px}
 }
 .card.compact > .details-toggle{border-top:0;padding-top:2px;margin-top:0}
 .details-toggle span{width:29px;height:29px;border-radius:999px;background:var(--fill);color:var(--accent);display:grid;place-items:center;font-weight:600;flex:0 0 auto;transition:background .15s ease,color .15s ease}
+.details-toggle span svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s ease}
 .details-toggle[aria-expanded="true"] span{background:var(--accent);color:#fff}
+.details-toggle[aria-expanded="true"] span svg{transform:rotate(180deg)}
 .session-fields{padding-top:12px;display:grid;gap:10px}
 .session-details[hidden],.session-fields[hidden],.diagnostics[hidden]{display:none!important}
 .session-fields:not([hidden]),.diagnostics:not([hidden]){animation:softOpen .18s ease both}
@@ -242,10 +247,10 @@ label input,label select{margin-top:6px}
 .sticky-actions{
   position:sticky;bottom:calc(var(--nav-h) + 10px + env(safe-area-inset-bottom));z-index:20;
   display:grid;grid-template-columns:2fr 1fr;gap:8px;
-  background:var(--glass);
-  -webkit-backdrop-filter:blur(20px) saturate(180%);backdrop-filter:blur(20px) saturate(180%);
-  border:1px solid color-mix(in srgb,var(--line) 70%,transparent);border-radius:22px;padding:8px;margin:12px 0;
-  box-shadow:var(--shadow);
+  background:linear-gradient(color-mix(in srgb,var(--glass) 88%,transparent), var(--glass));
+  -webkit-backdrop-filter:blur(28px) saturate(200%);backdrop-filter:blur(28px) saturate(200%);
+  border:1px solid color-mix(in srgb,var(--line) 55%,transparent);border-radius:22px;padding:8px;margin:12px 0;
+  box-shadow:inset 0 1px 0 var(--glass-rim), inset 0 -1px 0 rgba(0,0,0,.05), var(--shadow);
 }
 @supports not (backdrop-filter:blur(1px)){ .sticky-actions{background:var(--panel)} }
 #pageTrain{padding-bottom:8px}
@@ -255,10 +260,10 @@ label input,label select{margin-top:6px}
 .bottom-nav{
   position:fixed;left:50%;bottom:calc(8px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:50;
   width:min(560px,calc(100% - 20px));height:var(--nav-h);
-  background:var(--glass);
-  -webkit-backdrop-filter:blur(20px) saturate(180%);backdrop-filter:blur(20px) saturate(180%);
-  border:1px solid color-mix(in srgb,var(--line) 70%,transparent);
-  box-shadow:0 12px 32px rgba(0,0,0,.14);border-radius:26px;
+  background:linear-gradient(color-mix(in srgb,var(--glass) 88%,transparent), var(--glass));
+  -webkit-backdrop-filter:blur(28px) saturate(200%);backdrop-filter:blur(28px) saturate(200%);
+  border:1px solid color-mix(in srgb,var(--line) 55%,transparent);
+  box-shadow:inset 0 1px 0 var(--glass-rim), 0 12px 32px rgba(0,0,0,.14);border-radius:26px;
   display:grid;grid-template-columns:repeat(4,1fr);padding:6px;gap:2px;
 }
 @supports not (backdrop-filter:blur(1px)){ .bottom-nav{background:var(--panel)} }
@@ -356,6 +361,10 @@ label input,label select{margin-top:6px}
 }
 .switch input:checked{background:var(--good)}
 .switch input:checked::before{transform:translateX(20px)}
+.row-input{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.row-input input{width:86px;min-height:40px;text-align:center;padding:8px;font-variant-numeric:tabular-nums}
+.row-input .unit{color:var(--muted);font-size:13px;font-weight:600;min-width:24px}
+.profile-note{padding:6px 0 10px}
 .account-row{display:flex;align-items:center;gap:12px}
 .avatar{
   width:46px;height:46px;border-radius:999px;flex:0 0 auto;

@@ -26,7 +26,7 @@
     }
   }catch(e){}
   </script>
-  <link rel="stylesheet" href="src/styles.css?v=17.1.0">
+  <link rel="stylesheet" href="src/styles.css?v=17.2.0">
   <script type="application/json" id="programFallback">{
   "version": "7.0.0",
   "title": "The Min-Max Program",
@@ -378,7 +378,7 @@
     ]
   }
 }</script>
-  <script defer src="src/app.js?v=17.1.0"></script>
+  <script defer src="src/app.js?v=17.2.0"></script>
 </head>
 <body>
   <noscript><div class="noscript">Enable JavaScript to use MinMax Tracker.</div></noscript>
@@ -392,9 +392,9 @@
         <div class="trainbar-top">
           <h1 id="trainTitle">Train</h1>
           <div class="week-mini">
-            <button id="weekMinus" type="button" aria-label="Previous week">−</button>
+            <button id="weekMinus" type="button" aria-label="Previous week"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-5 6 5 6"/></svg></button>
             <span>W<b id="weekNumber">1</b></span>
-            <button id="weekPlus" type="button" aria-label="Next week">+</button>
+            <button id="weekPlus" type="button" aria-label="Next week"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l5 6-5 6"/></svg></button>
           </div>
         </div>
         <div id="dayTabs" class="chips" role="tablist" aria-label="Training day"></div>
@@ -407,7 +407,7 @@
       <div id="exerciseList" class="stack"></div>
 
       <section class="card compact">
-        <button id="sessionToggle" class="details-toggle" type="button" aria-expanded="false"><span data-mark>+</span><b>Session info</b></button>
+        <button id="sessionToggle" class="details-toggle" type="button" aria-expanded="false"><span data-mark><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10l4 4 4-4"/></svg></span><b>Session info</b></button>
         <div id="sessionFields" class="session-fields" hidden>
           <div class="grid2">
             <label>Date<input id="sDate" type="date"></label>
@@ -469,6 +469,14 @@
           <span class="switch"><input id="rirToggle" type="checkbox" role="switch" aria-label="Show RIR fields"></span>
         </label>
       </section>
+      <h3 class="group-title">Profile</h3>
+      <section class="card list-group">
+        <div class="row-item"><span class="row-label">Height</span><div class="row-input"><input id="pHeight" type="number" inputmode="numeric" min="120" max="230" step="1" placeholder="173" aria-label="Height, cm"><span class="unit">cm</span></div></div>
+        <div class="row-item"><span class="row-label">Weight</span><div class="row-input"><input id="pWeight" type="number" inputmode="decimal" min="30" step="0.5" placeholder="76" aria-label="Weight, kg"><span class="unit">kg</span></div></div>
+        <div class="row-item"><span class="row-label">Age</span><div class="row-input"><input id="pAge" type="number" inputmode="numeric" min="10" max="100" step="1" placeholder="24" aria-label="Age, years"><span class="unit">yrs</span></div></div>
+        <div class="row-item"><span class="row-label">Sex</span><div class="seg-mini" id="sexSeg" role="group" aria-label="Sex"><button type="button" data-sex="m" aria-pressed="false">M</button><button type="button" data-sex="f" aria-pressed="false">F</button></div></div>
+        <p class="small profile-note">Used to estimate starting weights and progression targets. Logged bodyweight takes priority over the profile weight.</p>
+      </section>
       <h3 class="group-title">Data</h3>
       <section class="card list-group">
         <button id="exportJson" class="row-btn" type="button">Export JSON<span class="row-note">Full backup</span></button>
@@ -477,7 +485,7 @@
         <input id="importFile" type="file" accept="application/json,.json" hidden>
       </section>
       <section class="card compact">
-        <button id="diagnosticsToggle" class="details-toggle" type="button" aria-expanded="false"><span data-mark>+</span><b>Sync diagnostics</b></button>
+        <button id="diagnosticsToggle" class="details-toggle" type="button" aria-expanded="false"><span data-mark><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10l4 4 4-4"/></svg></span><b>Sync diagnostics</b></button>
         <div id="diagnostics" class="diagnostics" hidden></div>
       </section>
       <h3 class="group-title">About</h3>

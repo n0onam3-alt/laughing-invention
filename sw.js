@@ -1,4 +1,4 @@
-const CACHE_VERSION = '17.1.0';
+const CACHE_VERSION = '17.2.0';
 const CACHE = `minmax-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',
