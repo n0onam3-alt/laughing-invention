@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '17.3.0';
+const APP_VERSION = '17.3.1';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';
@@ -185,21 +185,21 @@ function setTheme(pref){
   applyResolvedTheme();
   $$('#themeSeg [data-theme-pref]').forEach(b=>{ const on=b.dataset.themePref===state.prefs.theme; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
 }
-/* 🥚 Badge vault: 12 secret badges. Conditions are never shown — locked slots stay “?”.
-   Checked after every new save; each unlock gets a full-screen reveal with confetti. */
+/* 🥚 Badge vault: 12 secret badges. Locked slots hide the name (“???”) but show how to earn
+   it. Checked after every new save; each unlock gets a full-screen reveal with confetti. */
 const BADGES=[
-  {id:'first_blood',  icon:'🩸', name:'First Blood',        line:'The iron tasted you. It wants more.',           check:c=>c.total>=1},
-  {id:'night_stalker',icon:'🦇', name:'Night Stalker',      line:'Trained while the city slept.',                 check:c=>c.hour<5},
-  {id:'dawn_raider',  icon:'🌅', name:'Dawn Raider',        line:'Beat the sun to the fight.',                    check:c=>c.hour>=5&&c.hour<7},
-  {id:'widowmaker',   icon:'💀', name:'Widowmaker',         line:'20 reps. One set. No survivors.',               check:c=>c.maxReps>=20},
-  {id:'plate_goblin', icon:'👺', name:'Plate Goblin',       line:'Double bodyweight on the bar. Feed the greed.', check:c=>c.bw>0&&c.maxLoad>=2*c.bw},
-  {id:'rampage',      icon:'👹', name:'Rampage',            line:'Three PRs in one session. Unhinged.',           check:c=>c.prs>=3},
-  {id:'no_mercy',     icon:'⚔️', name:'No Mercy',           line:'Every exercise executed. Zero skipped.',        check:c=>c.fullDay},
-  {id:'hitman',       icon:'⚡', name:'Hitman',             line:'In. Out. Thirty minutes. Clean job.',           check:c=>c.duration>0&&c.duration<=30&&c.exCount>=4},
-  {id:'undead',       icon:'👻', name:'Back From the Dead', line:'Two weeks in the grave. Rose anyway.',          check:c=>c.gapDays>=14},
-  {id:'grave_digger', icon:'⚰️', name:'Grave Digger',       line:'100 tonnes moved. Keep digging.',               check:c=>c.lifetimeVol>=100000},
-  {id:'centurion',    icon:'🛡️', name:'Centurion',          line:'100 wars logged. Veteran status.',              check:c=>c.total>=100},
-  {id:'annihilator',  icon:'💥', name:'Annihilator',        line:'Whole split crushed in one week.',              check:c=>c.weekSweep}
+  {id:'first_blood',  icon:'🩸', name:'First Blood',        line:'The iron tasted you. It wants more.',                                      how:'Save your very first workout.',                        check:c=>c.total>=1},
+  {id:'night_stalker',icon:'🦇', name:'Night Stalker',      line:'Gains don’t sleep. Apparently neither do you.',                            how:'Finish a workout between midnight and 5 AM.',          check:c=>c.hour<5},
+  {id:'dawn_raider',  icon:'🌅', name:'5AM Psychopath',     line:'Alarm at 4:45. Chose violence before breakfast.',                          how:'Finish a workout between 5 and 7 AM.',                 check:c=>c.hour>=5&&c.hour<7},
+  {id:'widowmaker',   icon:'💀', name:'Widowmaker',         line:'20 reps. One set. Your ancestors felt it.',                                how:'Crank out 20+ reps in a single set.',                  check:c=>c.maxReps>=20},
+  {id:'plate_goblin', icon:'👺', name:'Plate Goblin',       line:'Double bodyweight moved. The plates whisper your name now.',               how:'Lift 2× your bodyweight in one set.',                  check:c=>c.bw>0&&c.maxLoad>=2*c.bw},
+  {id:'rampage',      icon:'👹', name:'Rampage',            line:'Three PRs in one session. Leave some for the rest of us.',                 how:'Break 3 personal records in one workout.',             check:c=>c.prs>=3},
+  {id:'no_mercy',     icon:'⚔️', name:'No Mercy',           line:'Skipped nothing. Not even the ones you hate.',                             how:'Complete every exercise on the day’s plan.',           check:c=>c.fullDay},
+  {id:'hitman',       icon:'⚡', name:'Hitman',             line:'In. Out. Thirty minutes. Nobody saw you coming.',                          how:'Finish 4+ exercises in 30 minutes or less.',           check:c=>c.duration>0&&c.duration<=30&&c.exCount>=4},
+  {id:'undead',       icon:'👻', name:'Back From the Dead', line:'Two weeks gone. The dumbbells almost filed a missing person report.',      how:'Come back and train after 14+ days away.',             check:c=>c.gapDays>=14},
+  {id:'grave_digger', icon:'⚰️', name:'Grave Digger',       line:'100 tonnes lifted. That’s a lot of soup cans, sweetie.',                   how:'Move 100,000 kg of lifetime volume.',                  check:c=>c.lifetimeVol>=100000},
+  {id:'centurion',    icon:'🛡️', name:'Centurion',          line:'100 workouts deep. Your rest days fear you.',                              how:'Log your 100th workout.',                              check:c=>c.total>=100},
+  {id:'annihilator',  icon:'💥', name:'Annihilator',        line:'Whole split flattened in one week. Even grandma is impressed. Barely.',    how:'Train all 4 program days within 7 days.',              check:c=>c.weekSweep}
 ];
 function buildBadgeCtx(session, prs){
   const sessions=activeSessionsAsc();
@@ -250,10 +250,10 @@ function renderBadgeCount(){ const el=$('#badgeCount'); if(el) el.textContent=`�
 function renderBadgePanel(){
   const host=$('#badgePanel'); if(!host) return;
   const n=Object.keys(state.prefs.badges).length;
-  host.innerHTML=`<p class="small badge-intro">${n===BADGES.length?'All badges collected. You are the final boss.':`${BADGES.length-n} still hidden. Earn them — no hints.`}</p><div class="badge-cells">`+
+  host.innerHTML=`<p class="small badge-intro">${n===BADGES.length?'All badges collected. You are the final boss.':`${BADGES.length-n} still locked. The instructions are right there, sweetheart.`}</p><div class="badge-cells">`+
     BADGES.map(b=>state.prefs.badges[b.id]
       ?`<div class="badge-cell unlocked"><span class="b-ico">${b.icon}</span><b>${esc(b.name)}</b><span class="small">${esc(b.line)}</span></div>`
-      :`<div class="badge-cell"><span class="b-ico">?</span><b>???</b><span class="small">Locked</span></div>`).join('')+'</div>';
+      :`<div class="badge-cell"><span class="b-ico">?</span><b>???</b><span class="small">${esc(b.how)}</span></div>`).join('')+'</div>';
 }
 function toggleBadgePanel(){ const panel=$('#badgePanel'); const btn=$('#aboutRow'); if(!panel) return; const open=panel.hidden; if(open) renderBadgePanel(); panel.hidden=!open; btn?.setAttribute('aria-expanded', String(open)); }
 
