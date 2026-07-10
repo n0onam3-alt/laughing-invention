@@ -65,6 +65,24 @@ h2{font-size:1.05rem;font-weight:700;margin:26px 0 10px}
 .routine-item .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
 .routine-item .nm{font-weight:600;font-size:.95rem;flex:1}
 .routine-item .meta{color:var(--muted);font-size:.85rem;white-space:nowrap}
+.breaks{display:flex;gap:7px;justify-content:center;align-items:center;font-size:.85rem;color:var(--muted)}
+.breaks .bd{width:9px;height:9px;border-radius:50%;background:var(--card2);border:1.5px solid var(--line)}
+.breaks .bd.on{background:var(--accent);border-color:var(--accent)}
+
+/* Exercise art */
+.art{display:flex;justify-content:center;color:var(--muted)}
+.art svg{width:92px;height:92px;overflow:visible}
+.art .ln{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.art .ac{stroke:var(--accent)}
+.ex-art{margin:2px 0 10px}
+@keyframes artTuck{0%,18%{transform:translateX(-6px)}50%,72%{transform:translateX(4px)}100%{transform:translateX(-6px)}}
+@keyframes artCeil{0%,18%{transform:rotate(0deg)}50%,72%{transform:rotate(22deg)}100%{transform:rotate(0deg)}}
+@keyframes artPulse{0%,25%{transform:translateY(0);opacity:.55}55%,75%{transform:translateY(-3px);opacity:1}100%{transform:translateY(0);opacity:.55}}
+@keyframes artCheek{0%,20%{transform:translateY(0)}55%,75%{transform:translateY(-4px)}100%{transform:translateY(0)}}
+@keyframes artTilt{0%{transform:rotate(-15deg)}50%{transform:rotate(15deg)}100%{transform:rotate(-15deg)}}
+@keyframes artLift{0%,20%{transform:translateY(0) rotate(0)}50%,72%{transform:translateY(-5px) rotate(-7deg)}100%{transform:translateY(0) rotate(0)}}
+@keyframes artFade{0%,30%{opacity:0}55%,80%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.art svg *{animation:none !important}}
 
 /* Exercises */
 .ex-card{cursor:pointer}
@@ -127,7 +145,7 @@ nav{
 .p-exname{font-size:1.35rem;font-weight:800;letter-spacing:-.02em}
 .p-phase{font-size:.85rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
 .p-phase.rest{color:var(--muted)}
-.ring-wrap{position:relative;width:min(62vw,240px);aspect-ratio:1;margin:8px 0}
+.ring-wrap{position:relative;width:min(52vw,200px);aspect-ratio:1;margin:4px 0}
 .ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg)}
 .ring-bg{stroke:var(--card2);fill:none;stroke-width:9}
 .ring-fg{stroke:var(--accent);fill:none;stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .15s linear}
@@ -164,6 +182,7 @@ nav{
 .switch.on{background:var(--accent)}
 .switch::after{content:"";position:absolute;top:2.5px;left:3px;width:24px;height:24px;background:#fff;border-radius:50%;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .switch.on::after{left:21px}
+.set-note{color:var(--muted);font-size:.78rem;line-height:1.5;padding:8px 0 2px}
 .reset-btn{width:100%;background:none;border:none;color:var(--danger);font-weight:700;font-size:.95rem;padding:14px 0 2px;cursor:pointer;font-family:inherit}
 
 .toast{
@@ -193,6 +212,8 @@ nav{
       <div id="hero-status"></div>
       <button class="bigbtn" id="btn-start">Start session</button>
       <div class="sub" id="session-est"></div>
+      <button class="bigbtn secondary" id="btn-break">1-minute posture break</button>
+      <div class="breaks" id="breaks-row"></div>
     </div>
 
     <h2>Today's routine</h2>
@@ -258,6 +279,7 @@ nav{
   <div class="p-mid" id="p-mid">
     <div class="p-phase" id="p-phase"></div>
     <div class="p-exname" id="p-exname"></div>
+    <div class="art" id="p-art"></div>
     <div class="ring-wrap">
       <svg viewBox="0 0 100 100">
         <circle class="ring-bg" cx="50" cy="50" r="44"></circle>
@@ -301,6 +323,16 @@ nav{
     <span class="lbl">Vibration</span>
     <div class="switch" id="sw-vibe"></div>
   </div>
+  <div class="set-row">
+    <span class="lbl">Posture pings</span>
+    <div class="seg" id="seg-ping">
+      <button data-v="0">Off</button>
+      <button data-v="30">30m</button>
+      <button data-v="60">60m</button>
+      <button data-v="90">90m</button>
+    </div>
+  </div>
+  <div class="set-note">Pings remind you to reset your posture and fire while Tuck is open (keep the tab or installed app running). For guaranteed reminders when it's closed, set a repeating phone alarm.</div>
   <button class="reset-btn" id="btn-reset">Reset all data</button>
 </div>
 
@@ -310,6 +342,49 @@ nav{
 "use strict";
 
 /* ---------------- Data ---------------- */
+
+/* Schematic exercise illustrations (inline SVG, animated) */
+const P_FACE = "M67 12 Q45 12 42 30 Q41 37 36 44 Q33 47 37 48.5 Q40 50 39 54 Q38 57 41 58 Q44 59 42.5 62 Q40.5 67 48 68.5 Q55 70 56.5 76 L57 88";
+const P_BACK = "M67 12 Q83 19 81 38 Q79.5 54 72 61 L72 88";
+const HEAD = `<path class="ln" d="${P_FACE}"/><path class="ln" d="${P_BACK}"/><circle cx="49" cy="37" r="2.4" fill="currentColor"/>`;
+const svgWrap = inner => `<svg viewBox="0 0 100 100" aria-hidden="true">${inner}</svg>`;
+
+const ART = {
+  "chin-tuck": svgWrap(`
+    <g style="animation:artTuck 2.8s ease-in-out infinite">${HEAD}</g>
+    <g style="animation:artFade 2.8s ease-in-out infinite"><path class="ln ac" d="M10 78 H26 M20 72 l7 6 -7 6"/></g>`),
+  "wall-tuck": svgWrap(`
+    <line class="ln" x1="88" y1="6" x2="88" y2="94" opacity=".4"/>
+    <g style="animation:artTuck 2.8s ease-in-out infinite">${HEAD}</g>
+    <g style="animation:artFade 2.8s ease-in-out infinite"><path class="ln ac" d="M10 78 H26 M20 72 l7 6 -7 6"/></g>`),
+  "ceiling-lift": svgWrap(`
+    <g style="animation:artCeil 3s ease-in-out infinite;transform-origin:62px 80px">${HEAD}</g>
+    <path class="ln ac" d="M16 44 Q20 30 33 22 M33 22 l-9 1 M33 22 l-2 9" style="animation:artFade 3s ease-in-out infinite"/>`),
+  "tongue-press": svgWrap(`
+    ${HEAD}
+    <path class="ln ac" d="M45 57 Q51 50 57 55" style="animation:artPulse 1.8s ease-in-out infinite"/>`),
+  "cheek-lifter": svgWrap(`
+    <circle class="ln" cx="50" cy="46" r="30"/>
+    <circle cx="40" cy="40" r="2.4" fill="currentColor"/><circle cx="60" cy="40" r="2.4" fill="currentColor"/>
+    <ellipse class="ln" cx="50" cy="61" rx="6" ry="8"/>
+    <g style="animation:artCheek 2s ease-in-out infinite">
+      <path class="ln ac" d="M32 51 q6 6 12 3"/><path class="ln ac" d="M68 51 q-6 6 -12 3"/>
+    </g>`),
+  "neck-stretch": svgWrap(`
+    <path class="ln" d="M18 92 Q50 82 82 92"/>
+    <g style="animation:artTilt 3.4s ease-in-out infinite;transform-origin:50px 84px">
+      <circle class="ln" cx="50" cy="48" r="24"/>
+      <circle cx="42" cy="44" r="2.4" fill="currentColor"/><circle cx="58" cy="44" r="2.4" fill="currentColor"/>
+      <path class="ln" d="M44 58 q6 4 12 0"/>
+    </g>`),
+  "head-lift": svgWrap(`
+    <line class="ln" x1="6" y1="86" x2="94" y2="86" opacity=".4"/>
+    <path class="ln" d="M90 84 L72 84 L62 64 L50 82"/>
+    <g style="animation:artLift 2.8s ease-in-out infinite;transform-origin:42px 84px">
+      <circle class="ln" cx="30" cy="72" r="11"/>
+      <path class="ln ac" d="M38 78 q4 3 8 3"/>
+    </g>`)
+};
 
 const EXERCISES = [
   {
@@ -436,6 +511,15 @@ const EXERCISES = [
 
 const LEARN = [
   {
+    title: "Can 10 minutes beat 5 hours of phone?",
+    body: [
+      "Honestly: not by itself. If you train 10 minutes and then spend 5 hours with your chin at your chest, the exposure wins. The session isn't the whole strategy — it's one of three levers.",
+      "① Train capacity: endurance in the deep neck flexors changes your resting head carriage all day, not just during the session. ② Interrupt the exposure: the damage comes from long uninterrupted stretches in flexion, so Tuck now has 1-minute posture breaks and optional posture pings — three breaks spread across your screen time beat a second full session. ③ Cut the insult at the source: raise your phone to eye level and bring your monitor up. This one costs zero minutes and attacks the whole 5 hours.",
+      "Good timing: full session whenever it reliably fits (morning anchors the habit), posture breaks every 60–90 minutes during screen-heavy stretches."
+    ],
+    src: null
+  },
+  {
     title: "Why chin tucks?",
     body: [
       "Hours of screens pull the head forward. For every couple of centimetres your head sits ahead of your spine, the muscles under your chin lengthen and weaken, and the jaw–neck angle blurs — that's a big part of what people read as a 'soft' jawline.",
@@ -485,7 +569,7 @@ const store = {
   set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 };
 
-let settings = Object.assign({ level: "standard", sound: true, vibe: true }, store.get("ct.settings", {}));
+let settings = Object.assign({ level: "standard", sound: true, vibe: true, ping: 0 }, store.get("ct.settings", {}));
 let log = store.get("ct.log", []); // [{d:'YYYY-MM-DD', mins, ts}]
 
 function saveSettings(){ store.set("ct.settings", settings); }
@@ -495,6 +579,10 @@ const pad = n => String(n).padStart(2, "0");
 const dayKey = d => d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
 const todayKey = () => dayKey(new Date());
 const doneDays = () => new Set(log.map(e => e.d));
+const isMicro = e => e.type === "micro";
+const fullToday = () => log.some(e => e.d === todayKey() && !isMicro(e));
+const breaksToday = () => log.filter(e => e.d === todayKey() && isMicro(e)).length;
+const BREAK_GOAL = 3;
 
 /* ---------------- Routine building ---------------- */
 
@@ -531,9 +619,9 @@ function renderToday(){
   $("#greeting").textContent = h < 5 ? "Night owl" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 
   const streak = currentStreak();
-  const did = doneDays().has(todayKey());
+  const did = fullToday();
   $("#hero-status").innerHTML = did
-    ? `<div class="donebadge">✓ Done today</div><div class="streak" style="margin-top:6px">Streak: <b>${streak} day${streak===1?"":"s"}</b> — see you tomorrow.</div>`
+    ? `<div class="donebadge">✓ Session done today</div><div class="streak" style="margin-top:6px">Streak: <b>${streak} day${streak===1?"":"s"}</b> — breaks still count below.</div>`
     : streak > 0
       ? `<div class="streak">🔥 <b>${streak}-day</b> streak — keep it alive.</div>`
       : `<div class="streak">A few focused minutes. That's the whole ask.</div>`;
@@ -541,6 +629,11 @@ function renderToday(){
   const list = routine();
   $("#btn-start").textContent = did ? "Do another round" : "Start session";
   $("#session-est").textContent = `${list.length} exercises · about ${estimateMinutes(list)} min · ${settings.level}`;
+
+  const b = breaksToday();
+  $("#breaks-row").innerHTML =
+    Array.from({length: Math.max(BREAK_GOAL, b)}, (_, i) => `<span class="bd${i < b ? " on" : ""}"></span>`).join("") +
+    `<span>${b}/${BREAK_GOAL} posture breaks today</span>`;
 
   $("#routine-list").innerHTML = list.map(ex => `
     <div class="routine-item">
@@ -563,6 +656,7 @@ function renderExercises(){
         <span class="chev">›</span>
       </div>
       <div class="ex-body">
+        <div class="art ex-art">${ART[ex.id] || ""}</div>
         <ol>${ex.steps.map(s => `<li>${s}</li>`).join("")}</ol>
         <div class="tag">Why it works</div>
         <div class="evidence">${ex.evidence}</div>
@@ -630,7 +724,7 @@ function renderProgress(){
     stat(days.size, "total days");
   $("#stats-row2").innerHTML =
     stat(bestStreak(), "best streak") +
-    stat(log.length, "sessions") +
+    stat(log.filter(isMicro).length, "breaks") +
     stat(totalMins >= 60 ? (totalMins/60).toFixed(1) + "h" : totalMins + "m", "trained");
 
   // calendar
@@ -703,8 +797,15 @@ function buildSteps(list){
   return steps;
 }
 
-function startSession(){
-  player.list = routine();
+// 1-minute posture break: a fixed micro-dose of the core move
+function microRoutine(){
+  const base = EXERCISES.find(e => e.id === "chin-tuck");
+  return [{ ...base, reps: 8, hold: 5, rest: 2 }];
+}
+
+function startSession(list, type){
+  player.list = list;
+  player.type = type;
   player.steps = buildSteps(player.list);
   player.idx = 0;
   player.paused = false;
@@ -719,11 +820,15 @@ function startSession(){
   enterStep();
 }
 
+/* Haptic language — each event has a distinct pattern:
+   new exercise: one long buzz · hold starts: double buzz · rest starts: short buzz
+   3-2-1 before a hold: tick pulses, so you can train without watching the screen */
 function enterStep(){
   const st = player.steps[player.idx];
   if (!st) { finishSession(); return; }
   player.stepDur = st.dur;
   player.remaining = st.dur;
+  player.lastSecs = null;
   const ex = player.list[st.ei];
 
   $("#p-count").textContent = `Exercise ${st.ei + 1} of ${player.list.length}`;
@@ -733,12 +838,13 @@ function enterStep(){
   else if (st.type === "hold") { phaseEl.textContent = "Hold"; phaseEl.classList.remove("rest"); }
   else { phaseEl.textContent = "Relax"; phaseEl.classList.add("rest"); }
   $("#ring").classList.toggle("rest", st.type !== "hold");
+  $("#p-art").innerHTML = ART[ex.id] || "";
   $("#p-rep").textContent = st.type === "prep" ? `${ex.reps} reps × ${ex.hold}s` : `Rep ${st.rep} of ${ex.reps}`;
   $("#p-cue").textContent = st.type === "prep" ? ex.steps[0] + " " + ex.cue : ex.cue;
 
-  if (st.type === "hold") { beep(880, .14); buzz(60); }
-  else if (st.type === "rest") { beep(440, .12); }
-  else { beep(550, .1); }
+  if (st.type === "hold") { beep(880, .14); buzz([70, 60, 70]); }
+  else if (st.type === "rest") { beep(440, .12); buzz(45); }
+  else { beep(550, .1); buzz(220); }
 
   paintTick();
   clearInterval(player.timer);
@@ -753,7 +859,15 @@ function tick(){
 }
 
 function paintTick(){
+  const st = player.steps[player.idx];
   const secs = Math.ceil(player.remaining);
+  if (secs !== player.lastSecs) {
+    // countdown warning before the next hold (during prep/rest only)
+    if (player.lastSecs !== null && st && st.type !== "hold" && secs <= 3 && secs > 0) {
+      beep(740, .06); buzz(25);
+    }
+    player.lastSecs = secs;
+  }
   $("#p-secs").textContent = secs;
   const frac = player.stepDur > 0 ? Math.max(0, player.remaining / player.stepDur) : 0;
   $("#ring").style.strokeDashoffset = RING_LEN * (1 - frac);
@@ -777,13 +891,15 @@ function togglePause(){
 function finishSession(){
   clearInterval(player.timer);
   const mins = Math.max(1, Math.round((Date.now() - player.startedAt) / 60000));
-  log.push({ d: todayKey(), mins, ts: Date.now() });
+  log.push({ d: todayKey(), mins, ts: Date.now(), type: player.type });
   saveLog();
-  buzz([80, 60, 80]); beep(660, .12); beep(880, .12, .15); beep(1100, .2, .3);
+  buzz([80, 60, 80, 60, 140]); beep(660, .12); beep(880, .12, .15); beep(1100, .2, .3);
   $("#p-mid").style.display = "none";
   $("#p-done").style.display = "flex";
   const s = currentStreak();
-  $("#p-done-sub").textContent = `${mins} min · ${s}-day streak. Same time tomorrow.`;
+  $("#p-done-sub").textContent = player.type === "micro"
+    ? `${breaksToday()}/${BREAK_GOAL} breaks today · ${s}-day streak. Next one in an hour or so.`
+    : `${mins} min · ${s}-day streak. Same time tomorrow.`;
   $("#p-pause").textContent = "Close";
   $("#p-skip").textContent = "Done";
 }
@@ -795,7 +911,8 @@ function closePlayer(){
   renderToday();
 }
 
-$("#btn-start").addEventListener("click", startSession);
+$("#btn-start").addEventListener("click", () => startSession(routine(), "full"));
+$("#btn-break").addEventListener("click", () => startSession(microRoutine(), "micro"));
 $("#p-close").addEventListener("click", closePlayer);
 $("#p-pause").addEventListener("click", () => {
   if ($("#p-done").style.display !== "none") { closePlayer(); return; }
@@ -814,6 +931,8 @@ function closeSheet(){ $("#sheet-backdrop").classList.remove("active"); $("#shee
 function renderSheet(){
   document.querySelectorAll("#seg-level button").forEach(b =>
     b.classList.toggle("on", b.dataset.v === settings.level));
+  document.querySelectorAll("#seg-ping button").forEach(b =>
+    b.classList.toggle("on", +b.dataset.v === settings.ping));
   $("#sw-sound").classList.toggle("on", settings.sound);
   $("#sw-vibe").classList.toggle("on", settings.vibe);
 }
@@ -823,14 +942,50 @@ $("#sheet-backdrop").addEventListener("click", closeSheet);
 document.querySelectorAll("#seg-level button").forEach(b => b.addEventListener("click", () => {
   settings.level = b.dataset.v; saveSettings(); renderSheet(); renderToday(); renderExercises();
 }));
+document.querySelectorAll("#seg-ping button").forEach(b => b.addEventListener("click", () => {
+  settings.ping = +b.dataset.v; saveSettings(); renderSheet(); resetPing();
+  if (settings.ping > 0) {
+    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+    toast(`Posture ping every ${settings.ping} min while Tuck is open`);
+  }
+}));
 $("#sw-sound").addEventListener("click", () => { settings.sound = !settings.sound; saveSettings(); renderSheet(); if (settings.sound) beep(660); });
 $("#sw-vibe").addEventListener("click", () => { settings.vibe = !settings.vibe; saveSettings(); renderSheet(); buzz(50); });
 $("#btn-reset").addEventListener("click", () => {
   if (!confirm("Delete all progress and settings? This cannot be undone.")) return;
   localStorage.removeItem("ct.log"); localStorage.removeItem("ct.settings");
-  log = []; settings = { level: "standard", sound: true, vibe: true };
+  log = []; settings = { level: "standard", sound: true, vibe: true, ping: 0 };
   closeSheet(); renderToday(); renderExercises(); renderProgress(); toast("All data cleared");
 });
+
+/* ---------------- Posture pings ----------------
+   Fire while the app is open: haptic + toast in the foreground,
+   a system notification if the tab/app is in the background. */
+
+let pingDue = 0;
+function resetPing(){ pingDue = settings.ping > 0 ? Date.now() + settings.ping * 60000 : 0; }
+
+function firePing(){
+  buzz([80, 60, 80]);
+  const msg = "Posture check — chin back, screen up. 1-minute break?";
+  if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then(r => r.showNotification("Tuck", { body: msg, icon: "icons/icon-192.png" }));
+      } else {
+        new Notification("Tuck", { body: msg });
+      }
+    } catch {}
+  } else {
+    toast("Posture check: chin back, screen up"); beep(660, .1);
+  }
+}
+
+setInterval(() => {
+  if (!settings.ping || !pingDue) return;
+  if (Date.now() >= pingDue) { resetPing(); firePing(); }
+}, 20000);
+resetPing();
 
 /* ---------------- Toast ---------------- */
 

@@ -11,6 +11,16 @@ then "Add to Home Screen" on mobile for the full app experience.
 
 - **Today** — guided daily session (~7 min at Standard) with a full-screen player:
   hold/relax timers, rep counting, progress ring, sound + vibration cues, pause/skip.
+  Plus **1-minute posture breaks** (a micro-dose of chin tucks, goal 3/day) — because one
+  session can't outweigh hours of phone flexion; interrupting the exposure is half the job.
+- **Haptic language** — distinct vibration patterns: long buzz = new exercise, double
+  buzz = hold starts, short buzz = rest, tick pulses for the 3-2-1 before each hold —
+  so you can train without staring down at the screen.
+- **Posture pings** — optional 30/60/90-min reminders (haptic + toast, or a system
+  notification when backgrounded). Honest limitation: they fire while the app is open;
+  the settings sheet says so and suggests a phone alarm for guaranteed pings.
+- **Animated form illustrations** — minimal line pictograms for every exercise, shown in
+  the library and in the session player.
 - **Exercises** — library with step-by-step form cues, the evidence behind each move,
   and safety cautions.
 - **Progress** — day streak, best streak, weekly count, calendar of completed days,
