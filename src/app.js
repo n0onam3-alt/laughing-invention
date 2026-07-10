@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '17.3.1';
+const APP_VERSION = '17.3.2';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';

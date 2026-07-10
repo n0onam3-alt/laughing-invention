@@ -1,4 +1,4 @@
-const CACHE_VERSION = '17.3.1';
+const CACHE_VERSION = '17.3.2';
 const CACHE = `minmax-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',
@@ -7,8 +7,11 @@ const STATIC_ASSETS = [
   `/src/app.js?v=${CACHE_VERSION}`,
   `/program.json?v=${CACHE_VERSION}`,
   '/manifest.webmanifest',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  '/icons/icon-192.png?v=2',
+  '/icons/icon-512.png?v=2',
+  '/icons/icon-maskable-192.png',
+  '/icons/icon-maskable-512.png',
+  '/icons/apple-touch-icon.png'
 ];
 // Only unversioned entry points need to hit the network first. App assets carry a
 // ?v= cache-buster in their URL, so serving them cache-first is always correct and
