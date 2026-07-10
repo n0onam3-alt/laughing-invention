@@ -174,6 +174,9 @@ label input,label select{margin-top:6px}
   display:grid;align-content:center;
 }
 .goal-box span{display:block;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.goal-box[data-plates]{cursor:pointer;transition:background .13s ease}
+.goal-box[data-plates]:active{background:var(--fill2)}
+.goal-box[data-plates]::after{content:'🏋️';font-size:11px;float:right;opacity:.55;margin-left:6px}
 .rest-btn{
   flex:0 0 auto;min-width:92px;border:0;border-radius:var(--r-md);
   background:var(--fill);color:var(--accent);font-weight:700;font-size:14px;padding:0 12px;

@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '17.3.3';
+const APP_VERSION = '17.4.0';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';
@@ -97,6 +97,20 @@ function lifetimeVolume(){ let t=0; for(const s of activeSessionsAsc()) for(cons
 const WORKOUT_MARKS={1:'🎉 Workout #1 — the journey begins!',10:'🔥 10 workouts logged. It’s becoming a habit.',25:'💪 25 workouts — quarter century club.',50:'⚡ 50 workouts strong!',100:'🏆 Workout #100 — certified regular.',250:'🦾 250 workouts. Absolute machine.',500:'👑 500 workouts. Legend status.',1000:'🐐 Workout #1000. The GOAT.'};
 const VOLUME_MARKS=[[1000000,'🐋 1,000,000 kg lifetime volume — you’ve out-lifted a blue whale. Several times.'],[500000,'🚀 500,000 kg lifetime volume. Half a million!'],[250000,'🚂 250,000 kg lifetime — a whole locomotive.'],[100000,'🚛 100,000 kg lifetime — that’s a loaded semi-truck.'],[10000,'🐘 10,000 kg lifetime — about two elephants, moved by you.']];
 /* Milestone check for a freshly saved (new) session: workout count first, then lifetime volume thresholds. */
+/* When a newly saved workout completes the current week's whole split, advance the week
+   automatically — one less thing to remember at the gym. Returns true if it advanced. */
+function maybeAdvanceWeek(session){
+  if(!session || session.week!==state.week) return false;
+  const maxW=state.program?.weeks||12;
+  if(state.week>=maxW || !state.split.length) return false;
+  const done=new Set(activeSessionsAsc().filter(s=>s.week===state.week).map(s=>s.day));
+  if(!state.split.every(d=>done.has(d))) return false;
+  state.week+=1;
+  saveLocal(false);
+  const el=$('#weekNumber'); if(el) el.textContent=state.week;
+  renderTrainStatus();
+  return true;
+}
 function milestoneMessage(session){
   const total=activeSessionsAsc().length;
   if(WORKOUT_MARKS[total]) return WORKOUT_MARKS[total];
@@ -423,11 +437,11 @@ function renderExBody(ex,last){
     const s=saved[i] || {}; const prev=last?.sets?.[i] || null;
     const phLoad = prev && prev.load>0 ? String(round(prev.load)) : 'kg';
     const phReps = prev && prev.reps>0 ? String(round(prev.reps)) : unitPh;
-    sets += `<div class="set-card" data-set="${i}"><div class="set-top"><button class="set-num" data-act="same" type="button" aria-label="Set ${i+1}: copy last time">${i+1}</button><input data-field="load" type="number" inputmode="decimal" min="0" step="0.5" placeholder="${esc(phLoad)}" aria-label="Set ${i+1} load, kg" value="${s.load??''}"><input data-field="reps" type="number" inputmode="numeric" min="0" step="1" placeholder="${esc(phReps)}" aria-label="Set ${i+1} ${ex.timed?'seconds':'reps'}" value="${s.reps??''}"><button class="set-clear" data-act="clearSet" type="button" aria-label="Clear set ${i+1}">\u00d7</button></div><div class="rir-field"><label>RIR<input data-field="rir" type="number" inputmode="numeric" min="0" max="5" step="1" placeholder="0-5" value="${s.rir??''}"></label></div></div>`;
+    sets += `<div class="set-card" data-set="${i}"><div class="set-top"><button class="set-num" data-act="same" type="button" aria-label="Set ${i+1}: copy last time">${i+1}</button><input data-field="load" type="number" inputmode="decimal" enterkeyhint="next" min="0" step="0.5" placeholder="${esc(phLoad)}" aria-label="Set ${i+1} load, kg" value="${s.load??''}"><input data-field="reps" type="number" inputmode="numeric" enterkeyhint="next" min="0" step="1" placeholder="${esc(phReps)}" aria-label="Set ${i+1} ${ex.timed?'seconds':'reps'}" value="${s.reps??''}"><button class="set-clear" data-act="clearSet" type="button" aria-label="Clear set ${i+1}">\u00d7</button></div><div class="rir-field"><label>RIR<input data-field="rir" type="number" inputmode="numeric" min="0" max="5" step="1" placeholder="0-5" value="${s.rir??''}"></label></div></div>`;
   }
   return `<div class="ex-body">
     <div class="goal-row">
-      <div class="goal-box"><span>Target ${esc(ex.reps)} \u00b7 RIR ${esc(String(ex.rir||'\u2014').replace(/\s+/g,''))}</span>${esc(makeGoal(ex,last))}</div>
+      <div class="goal-box" ${isPlateLoaded(ex.name)?'data-plates role="button" tabindex="0" aria-label="Show plate breakdown"':''}><span>Target ${esc(ex.reps)} \u00b7 RIR ${esc(String(ex.rir||'\u2014').replace(/\s+/g,''))}</span>${esc(makeGoal(ex,last))}</div>
       <button class="rest-btn ${running?'running':''}" data-rest type="button" aria-label="Rest timer">${running?'\u2026':'Rest '+esc(ex.rest||'2 min')}</button>
     </div>
     <p class="last-line">${last?`Last time <b>${last.sets.map(setLabel).map(esc).join(' \u00b7 ')}</b> \u00b7 ${esc(shortDate(last.date))}${last.e1rm>0?` \u00b7 e1RM ${round(last.e1rm)} kg`:''}`:'First session \u2014 set your baseline.'}</p>
@@ -458,6 +472,21 @@ function startingWeight(name){
   for(const [re,frac] of START_FRACTIONS){ if(re.test(n)) return frac?plateRound(bw*frac*sexAdj):0; }
   return 0;
 }
+/* Plate math: which plates to load per side for a target weight (20 kg bar).
+   Only offered for barbell-style lifts — machines/cables/DBs don't stack plates on a bar. */
+function isPlateLoaded(name){
+  const n=String(name).toLowerCase();
+  if(/machine|cable|smith|t-bar|db|dumbbell|pulldown|pull-up|chin|crunch|raise|curl|extension|kickback|pec|shrug|dip|hang|leg press|calf/.test(n)) return false;
+  return /barbell|squat|rdl|deadlift|bench|incline press|hip thrust|row/.test(n);
+}
+function plateBreakdown(target){
+  const bar=20;
+  if(!(target>=bar)) return `${round(target)} kg is below the empty bar (${bar} kg)`;
+  let rest=(target-bar)/2; const used=[];
+  for(const p of [25,20,15,10,5,2.5,1.25]){ while(rest>=p-1e-9){ used.push(p); rest-=p; } }
+  return `🏋️ ${round(target)} kg = bar ${bar} + [${used.join(' + ')||'no plates'}] per side${rest>0.01?` · ${round(rest)} kg unrounded`:''}`;
+}
+
 /* Goal line: personalized double progression.
    - no history: bodyweight-scaled starting weight (or a clean-baseline cue)
    - plateau/regression: 10% reset, rebuild through the rep range
@@ -568,11 +597,13 @@ async function saveWorkout(){
     saveLocal(); dataChanged();
     haptic(prs.length?[15,70,15]:12);
     if(prs.length) confetti();
+    const advancedWeek=wasNew?maybeAdvanceWeek(session):false;
     const milestone=wasNew?milestoneMessage(session):'';
     const prMsg=prs.length?`🏆 PR · ${prs[0]}${prs.length>1?` +${prs.length-1} more`:''} — `:'';
     if(state.user){ const ok=await syncNow(false); toast(ok?`${prMsg}saved & synced`:`${prMsg}saved locally · sync pending`, ok?'':'danger'); }
     else { toast(`${prMsg}saved locally`); }
     if(milestone) setTimeout(()=>{ toast(milestone); confetti(36); haptic([12,60,12,60,12]); }, 1800);
+    if(advancedWeek) setTimeout(()=>{ toast(`📅 Week ${state.week-1} complete — moved you to week ${state.week}`); haptic(10); }, milestone?3600:1800);
     if(wasNew){ const earned=checkBadges(buildBadgeCtx(session, prs)); if(earned.length) setTimeout(()=>revealBadges(earned), 900); }
   } finally {
     state.saving = false;
@@ -718,14 +749,29 @@ function renderProgress(){
   const names=exerciseNames();
   const sel=$('#progressExercise');
   const previous=sel.value || state.progressExercise || '';
-  sel.innerHTML=names.map(n=>`<option value="${esc(n)}" ${n===previous?'selected':''}>${esc(n)}</option>`).join('');
-  if(previous && names.includes(previous)) sel.value=previous;
+  const hasBw=activeSessionsAsc().some(s=>Number(s.bw)>0);
+  sel.innerHTML=names.map(n=>`<option value="${esc(n)}" ${n===previous?'selected':''}>${esc(n)}</option>`).join('') + (hasBw?`<option value="__bw" ${previous==='__bw'?'selected':''}>Bodyweight</option>`:'');
+  if(previous && (names.includes(previous) || (previous==='__bw'&&hasBw))) sel.value=previous;
   state.progressExercise=sel.value || names[0] || '';
   if(state.progressView==='overall') renderOverall(); else renderExerciseProgress(state.progressExercise);
 }
 
 function renderOverall(){ $('#progressControls').style.display='none'; $('#viewOverall').classList.add('active'); $('#viewExercise').classList.remove('active'); const sessions=[...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id))).sort((a,b)=>new Date(a.date)-new Date(b.date)); const summaries=allSummaries(); const totalSets=sessions.reduce((sum,s)=>sum+s.exercises.reduce((a,e)=>a+e.sets.length,0),0); const volume=sessions.map(s=>s.exercises.reduce((sum,e)=>sum+e.sets.reduce((a,set)=>a+setVolume(set,e.name,s),0),0)); const weak=summaries.filter(x=>x.plateau||x.regressing); const improving=summaries.filter(x=>x.percent>0); renderStats([['Workouts',sessions.length],['Sets',totalSets],['Improving',improving.length],['Plateaus',weak.length]]); $('#chartTitle').textContent='Overall workload'; $('#chartSubtitle').textContent=sessions.length?`Last ${Math.min(18,sessions.length)} workouts · kg×reps`:''; drawChart(volume, sessions.map(s=>s.date), 'kg×reps'); renderInsights(); $('#listTitle').textContent='Exercise summary'; $('#progressList').innerHTML=summaries.length?summaries.sort((a,b)=>b.percent-a.percent).map(s=>`<div class="progress-row"><div><b>${esc(s.name)}</b><div class="small">${s.entries} logs · best ${round(s.best)} ${esc(s.unit)}</div></div><div class="metric">${s.percent>=0?'+':''}${round(s.percent)}%</div></div>`).join(''):'<div class="empty">No progress yet. Save a workout first.</div>'; }
-function renderExerciseProgress(name){ $('#progressControls').style.display='grid'; $('#viewOverall').classList.remove('active'); $('#viewExercise').classList.add('active'); if(!name){ renderStats([['Best','—'],['Latest','—'],['Change','—'],['Entries',0]]); $('#chartBox').innerHTML='<div class="empty">No chart data.</div>'; renderInsights(); return; } const metric=$('#progressMetric').value==='auto'?autoMetric(name):$('#progressMetric').value; const entries=exerciseEntries(name); const vals=entries.map(e=>valueForEntry(e,metric)); const unit=unitForMetric(metric); const best=vals.length?Math.max(...vals):0, latest=vals[vals.length-1]||0, first=vals[0]||0, change=latest-first; renderStats([['Best',`${round(best)} ${unit}`],['Latest',`${round(latest)} ${unit}`],['Change',`${change>=0?'+':''}${round(change)} ${unit}`],['Entries',entries.length]]); $('#chartTitle').textContent=`${name} · ${metric==='e1rm'?'Estimated 1RM':metric}`; $('#chartSubtitle').textContent=`Last ${Math.min(18, entries.length)} entries`; drawChart(vals, entries.map(e=>e.date), unit); renderInsights(name); $('#listTitle').textContent='Recent entries'; $('#progressList').innerHTML=entries.slice(-12).reverse().map(e=>`<div class="progress-row"><div><b>${esc(fmtDate(e.date))}</b><div class="small">Best set: ${setLabel(e.best)}</div></div><div class="metric">${round(valueForEntry(e,metric))} ${unit}</div></div>`).join('') || '<div class="empty">No entries.</div>'; }
+/* Bodyweight has been logged since v13 but was never visualized — pseudo-exercise "__bw". */
+function renderBodyweightProgress(){
+  $('#progressControls').style.display='grid'; $('#viewOverall').classList.remove('active'); $('#viewExercise').classList.add('active');
+  const entries=activeSessionsAsc().filter(s=>Number(s.bw)>0);
+  const vals=entries.map(s=>Number(s.bw));
+  const latest=vals[vals.length-1]||0, first=vals[0]||0, change=latest-first;
+  renderStats([['Latest',`${round(latest)} kg`],['Start',`${round(first)} kg`],['Change',`${change>=0?'+':''}${round(change)} kg`],['Weigh-ins',vals.length]]);
+  $('#chartTitle').textContent='Bodyweight';
+  $('#chartSubtitle').textContent=vals.length?`Last ${Math.min(18, vals.length)} weigh-ins`:'';
+  drawChart(vals, entries.map(s=>s.date), 'kg');
+  renderInsights();
+  $('#listTitle').textContent='Recent weigh-ins';
+  $('#progressList').innerHTML=entries.slice(-12).reverse().map(s=>`<div class="progress-row"><div><b>${esc(fmtDate(s.date))}</b><div class="small">${esc(s.day)} · week ${s.week}</div></div><div class="metric">${round(s.bw)} kg</div></div>`).join('') || '<div class="empty">No bodyweight logged yet.</div>';
+}
+function renderExerciseProgress(name){ if(name==='__bw') return renderBodyweightProgress(); $('#progressControls').style.display='grid'; $('#viewOverall').classList.remove('active'); $('#viewExercise').classList.add('active'); if(!name){ renderStats([['Best','—'],['Latest','—'],['Change','—'],['Entries',0]]); $('#chartBox').innerHTML='<div class="empty">No chart data.</div>'; renderInsights(); return; } const metric=$('#progressMetric').value==='auto'?autoMetric(name):$('#progressMetric').value; const entries=exerciseEntries(name); const vals=entries.map(e=>valueForEntry(e,metric)); const unit=unitForMetric(metric); const best=vals.length?Math.max(...vals):0, latest=vals[vals.length-1]||0, first=vals[0]||0, change=latest-first; renderStats([['Best',`${round(best)} ${unit}`],['Latest',`${round(latest)} ${unit}`],['Change',`${change>=0?'+':''}${round(change)} ${unit}`],['Entries',entries.length]]); $('#chartTitle').textContent=`${name} · ${metric==='e1rm'?'Estimated 1RM':metric}`; $('#chartSubtitle').textContent=`Last ${Math.min(18, entries.length)} entries`; drawChart(vals, entries.map(e=>e.date), unit); renderInsights(name); $('#listTitle').textContent='Recent entries'; $('#progressList').innerHTML=entries.slice(-12).reverse().map(e=>`<div class="progress-row"><div><b>${esc(fmtDate(e.date))}</b><div class="small">Best set: ${setLabel(e.best)}</div></div><div class="metric">${round(valueForEntry(e,metric))} ${unit}</div></div>`).join('') || '<div class="empty">No entries.</div>'; }
 function renderStats(rows){ $('#statsGrid').innerHTML=rows.map(([l,v])=>`<div class="stat"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join(''); }
 /* Chart is drawn in real pixel space (no viewBox stretching), so points stay round,
    the line can be smoothed, and axis labels are readable. Redrawn on resize. */
@@ -876,6 +922,7 @@ function registerEvents(){
     const del=e.target.closest('[data-delete]'); if(del){ e.preventDefault(); e.stopPropagation(); await deleteSession(del.dataset.delete, del.closest('.session')); return; }
     const edit=e.target.closest('[data-edit]'); if(edit){ e.preventDefault(); e.stopPropagation(); editSession(edit.dataset.edit); return; }
     const viewBtn=e.target.closest('#viewOverall,#viewExercise'); if(viewBtn){ state.progressView=viewBtn.dataset.view; state.progressExercise=$('#progressExercise')?.value||state.progressExercise||''; renderProgress(); return; }
+    const goalBox=e.target.closest('.goal-box[data-plates]'); if(goalBox){ const m=goalBox.textContent.match(/(\d+(?:\.\d+)?)\s*kg/); if(m){ haptic(6); toast(plateBreakdown(Number(m[1]))); } return; }
     const head=e.target.closest('.ex-head'); if(head){ toggleExercise(Number(head.dataset.exi)); return; }
     const rest=e.target.closest('[data-rest]'); if(rest){ toggleRest(rest); return; }
     const sexBtn=e.target.closest('#sexSeg [data-sex]'); if(sexBtn){ state.prefs.profile.sex=sexBtn.dataset.sex==='f'?'f':'m'; renderProfile(); saveLocal(false); dirty.train=true; return; }
@@ -895,7 +942,17 @@ function registerEvents(){
   window.addEventListener('offline', renderSyncChip);
   window.addEventListener('pagehide', flushDraft);
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden'){ flushDraft(); stopRestTicker(); } else if(restActive){ startRestTicker(); } });
-  $('#exerciseList').addEventListener('input', e=>{ const block=e.target.closest('.ex-block'); if(block) updateSetsFor(block); }); ['sDate','sBw','sNotes','sEnergy','sSleep'].forEach(id=>$('#'+id).addEventListener('input', collectSessionFields));
+  $('#exerciseList').addEventListener('input', e=>{ const block=e.target.closest('.ex-block'); if(block) updateSetsFor(block); });
+  /* Enter walks the logging flow: load → reps → next set's load → done (keyboard closes). */
+  $('#exerciseList').addEventListener('keydown', e=>{
+    if(e.key!=='Enter' || !e.target.matches('input')) return;
+    e.preventDefault();
+    const card=e.target.closest('.set-card'); if(!card) return;
+    if(e.target.dataset.field==='load'){ $('[data-field="reps"]',card)?.focus(); return; }
+    const nextCard=card.nextElementSibling;
+    const next=nextCard?.classList.contains('set-card') ? $('[data-field="load"]',nextCard) : null;
+    if(next) next.focus(); else e.target.blur();
+  }); ['sDate','sBw','sNotes','sEnergy','sSleep'].forEach(id=>$('#'+id).addEventListener('input', collectSessionFields));
   $('#progressExercise').onchange=()=>{ state.progressExercise=$('#progressExercise').value; renderExerciseProgress(state.progressExercise); }; $('#progressMetric').onchange=()=>{ state.progressExercise=$('#progressExercise').value||state.progressExercise; renderExerciseProgress(state.progressExercise); }; $('#exportJson').onclick=exportJson; $('#exportCsv').onclick=exportCsv; $('#importJsonBtn').onclick=()=>$('#importFile').click(); $('#importFile').onchange=e=>{ if(e.target.files[0]) importJsonFile(e.target.files[0]); e.target.value='';}; $('#resetLocal').onclick=resetLocalData; $('#eraseAll').onclick=eraseAllData;
 }
 async function registerServiceWorker(){

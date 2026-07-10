@@ -2,6 +2,17 @@
 
 Mobile-first PWA workout tracker for the Min-Max Program.
 
+## v17.4 "gym-rat"
+Quality-of-life features:
+- plate calculator: tap the goal box on barbell lifts (marked 🏋️) to see the per-side
+  plate breakdown for the suggested weight (20 kg bar; machines/cables/DBs excluded)
+- bodyweight chart: Progress → Exercise → "Bodyweight" plots your logged weigh-ins with
+  latest/start/change stats — the data was always collected, now it's visible
+- week auto-advance: saving the last remaining day of the current week's split moves you
+  to the next week automatically, with a toast
+- Enter walks the logging flow on the keyboard: load → reps → next set → done
+  (enterkeyhint="next" on set inputs)
+
 ## v17.3.3 "exterminator"
 Bug-hunt release — all three found via live browser reproduction:
 - editing a workout and reloading mid-edit no longer moves it to the previously selected
