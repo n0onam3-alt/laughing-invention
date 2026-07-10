@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '17.0.0-ios';
+const APP_VERSION = '17.3.1';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';
@@ -19,7 +19,7 @@ const state = {
   lastSyncAt:null, lastSyncError:null, syncRunning:false, user:null, supabase:null,
   schema:{deletedAt:true, meta:true}, progressView:'overall', progressExercise:'',
   sessionOpen:false, editId:null, saving:false, deleting:false, authBusy:false,
-  prefs:{theme:'auto', showRir:false, usedAutofill:false}, swReloading:false
+  prefs:{theme:'auto', showRir:false, usedAutofill:false, badges:{}, lowPower:false, profile:{height:173, weight:76, age:24, sex:'m'}}, swReloading:false
 };
 
 const $ = (s, r=document) => r.querySelector(s);
@@ -75,6 +75,36 @@ function renderActivePage(){
   else if(state.page==='settings'){ renderDiagnostics(); }
 }
 function haptic(pattern){ try{ navigator.vibrate?.(pattern); }catch(e){} }
+
+/* Confetti burst for PRs, milestones and unlocked secrets. Pure DOM + CSS, no deps;
+   skipped entirely under prefers-reduced-motion (the global reduce rule would freeze it). */
+function confetti(count=28){
+  if(state.prefs.lowPower) return;
+  try{ if(matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(e){}
+  let host=$('#confetti');
+  if(!host){ host=document.createElement('div'); host.id='confetti'; host.setAttribute('aria-hidden','true'); document.body.appendChild(host); }
+  const colors=['#007aff','#34c759','#ff9f0a','#ff3b30','#af52de','#ffd60a'];
+  for(let i=0;i<count;i++){
+    const p=document.createElement('i');
+    const size=6+Math.random()*6, dur=1+Math.random()*.9, delay=Math.random()*.25;
+    p.style.cssText=`left:${Math.random()*100}vw;width:${size}px;height:${size*.45}px;background:${colors[i%colors.length]};animation-duration:${dur}s;animation-delay:${delay}s;--drift:${(Math.random()-.5)*60}px;transform:rotate(${Math.random()*360}deg)`;
+    host.appendChild(p);
+    setTimeout(()=>p.remove(),(dur+delay)*1000+150);
+  }
+}
+
+function lifetimeVolume(){ let t=0; for(const s of activeSessionsAsc()) for(const e of s.exercises) for(const st of e.sets) t+=setVolume(st,e.name,s); return t; }
+const WORKOUT_MARKS={1:'🎉 Workout #1 — the journey begins!',10:'🔥 10 workouts logged. It’s becoming a habit.',25:'💪 25 workouts — quarter century club.',50:'⚡ 50 workouts strong!',100:'🏆 Workout #100 — certified regular.',250:'🦾 250 workouts. Absolute machine.',500:'👑 500 workouts. Legend status.',1000:'🐐 Workout #1000. The GOAT.'};
+const VOLUME_MARKS=[[1000000,'🐋 1,000,000 kg lifetime volume — you’ve out-lifted a blue whale. Several times.'],[500000,'🚀 500,000 kg lifetime volume. Half a million!'],[250000,'🚂 250,000 kg lifetime — a whole locomotive.'],[100000,'🚛 100,000 kg lifetime — that’s a loaded semi-truck.'],[10000,'🐘 10,000 kg lifetime — about two elephants, moved by you.']];
+/* Milestone check for a freshly saved (new) session: workout count first, then lifetime volume thresholds. */
+function milestoneMessage(session){
+  const total=activeSessionsAsc().length;
+  if(WORKOUT_MARKS[total]) return WORKOUT_MARKS[total];
+  const sVol=session.exercises.reduce((a,e)=>a+e.sets.reduce((x,st)=>x+setVolume(st,e.name,session),0),0);
+  const vol=lifetimeVolume();
+  for(const [t,msg] of VOLUME_MARKS){ if(vol>=t && vol-sVol<t) return msg; }
+  return '';
+}
 
 function toast(msg, tone=''){
   const el = $('#toast');
@@ -155,6 +185,96 @@ function setTheme(pref){
   applyResolvedTheme();
   $$('#themeSeg [data-theme-pref]').forEach(b=>{ const on=b.dataset.themePref===state.prefs.theme; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
 }
+/* 🥚 Badge vault: 12 secret badges. Locked slots hide the name (“???”) but show how to earn
+   it. Checked after every new save; each unlock gets a full-screen reveal with confetti. */
+const BADGES=[
+  {id:'first_blood',  icon:'🩸', name:'First Blood',        line:'The iron tasted you. It wants more.',                                      how:'Save your very first workout.',                        check:c=>c.total>=1},
+  {id:'night_stalker',icon:'🦇', name:'Night Stalker',      line:'Gains don’t sleep. Apparently neither do you.',                            how:'Finish a workout between midnight and 5 AM.',          check:c=>c.hour<5},
+  {id:'dawn_raider',  icon:'🌅', name:'5AM Psychopath',     line:'Alarm at 4:45. Chose violence before breakfast.',                          how:'Finish a workout between 5 and 7 AM.',                 check:c=>c.hour>=5&&c.hour<7},
+  {id:'widowmaker',   icon:'💀', name:'Widowmaker',         line:'20 reps. One set. Your ancestors felt it.',                                how:'Crank out 20+ reps in a single set.',                  check:c=>c.maxReps>=20},
+  {id:'plate_goblin', icon:'👺', name:'Plate Goblin',       line:'Double bodyweight moved. The plates whisper your name now.',               how:'Lift 2× your bodyweight in one set.',                  check:c=>c.bw>0&&c.maxLoad>=2*c.bw},
+  {id:'rampage',      icon:'👹', name:'Rampage',            line:'Three PRs in one session. Leave some for the rest of us.',                 how:'Break 3 personal records in one workout.',             check:c=>c.prs>=3},
+  {id:'no_mercy',     icon:'⚔️', name:'No Mercy',           line:'Skipped nothing. Not even the ones you hate.',                             how:'Complete every exercise on the day’s plan.',           check:c=>c.fullDay},
+  {id:'hitman',       icon:'⚡', name:'Hitman',             line:'In. Out. Thirty minutes. Nobody saw you coming.',                          how:'Finish 4+ exercises in 30 minutes or less.',           check:c=>c.duration>0&&c.duration<=30&&c.exCount>=4},
+  {id:'undead',       icon:'👻', name:'Back From the Dead', line:'Two weeks gone. The dumbbells almost filed a missing person report.',      how:'Come back and train after 14+ days away.',             check:c=>c.gapDays>=14},
+  {id:'grave_digger', icon:'⚰️', name:'Grave Digger',       line:'100 tonnes lifted. That’s a lot of soup cans, sweetie.',                   how:'Move 100,000 kg of lifetime volume.',                  check:c=>c.lifetimeVol>=100000},
+  {id:'centurion',    icon:'🛡️', name:'Centurion',          line:'100 workouts deep. Your rest days fear you.',                              how:'Log your 100th workout.',                              check:c=>c.total>=100},
+  {id:'annihilator',  icon:'💥', name:'Annihilator',        line:'Whole split flattened in one week. Even grandma is impressed. Barely.',    how:'Train all 4 program days within 7 days.',              check:c=>c.weekSweep}
+];
+function buildBadgeCtx(session, prs){
+  const sessions=activeSessionsAsc();
+  let maxReps=0, maxLoad=0;
+  for(const e of session.exercises) for(const s of e.sets){ if(!s.timed) maxReps=Math.max(maxReps, Number(s.reps)||0); maxLoad=Math.max(maxLoad, Number(s.load)||0); }
+  const dayList=state.program?.days?.[session.day]||[];
+  const names=new Set(session.exercises.map(e=>e.name));
+  const others=sessions.filter(s=>String(s.id)!==String(session.id));
+  let gapDays=0;
+  if(others.length){ const latest=others.reduce((m,s)=>s.date>m?s.date:m, others[0].date); gapDays=Math.round((new Date(session.date)-new Date(latest))/86400000); }
+  return {
+    total:sessions.length,
+    hour:new Date().getHours(),
+    maxReps, maxLoad,
+    bw:Number(session.bw)||Number(lastBodyweight())||Number(state.prefs.profile?.weight)||0,
+    prs:prs.length,
+    fullDay:dayList.length>0 && dayList.filter(x=>!x.optional).every(x=>names.has(x.name)),
+    duration:Number(session.meta?.durationMin)||0,
+    exCount:session.exercises.length,
+    gapDays,
+    lifetimeVol:lifetimeVolume(),
+    weekSweep:state.split.length>=2 && state.split.every(d=>sessions.some(s=>s.day===d && Math.abs(new Date(session.date)-new Date(s.date))<=6.5*86400000))
+  };
+}
+function checkBadges(ctx){
+  const out=[];
+  for(const b of BADGES){
+    if(state.prefs.badges[b.id]) continue;
+    let ok=false; try{ ok=!!b.check(ctx); }catch(e){}
+    if(ok){ state.prefs.badges[b.id]=nowIso(); out.push(b); }
+  }
+  if(out.length){ saveLocal(false); renderBadgeCount(); }
+  return out;
+}
+function showBadge(b, onDone){
+  haptic([20,80,20]); confetti(34);
+  const el=document.createElement('div');
+  el.className='badge-pop';
+  el.innerHTML=`<div class="badge-card" role="alertdialog" aria-label="Badge unlocked: ${esc(b.name)}"><span class="badge-glow" aria-hidden="true"></span><span class="badge-icon">${b.icon}</span><span class="badge-tag">Badge unlocked</span><b class="badge-name">${esc(b.name)}</b><span class="badge-line">${esc(b.line)}</span><span class="badge-hint">Tap to continue</span></div>`;
+  document.body.appendChild(el);
+  let closed=false;
+  const close=()=>{ if(closed) return; closed=true; el.classList.add('out'); setTimeout(()=>{ el.remove(); if(onDone) onDone(); }, 200); };
+  el.addEventListener('click', close);
+  setTimeout(close, 4500);
+}
+function revealBadges(list){ if(!list.length) return; showBadge(list[0], ()=>revealBadges(list.slice(1))); }
+function renderBadgeCount(){ const el=$('#badgeCount'); if(el) el.textContent=`🏅 ${Object.keys(state.prefs.badges).length}/${BADGES.length}`; }
+function renderBadgePanel(){
+  const host=$('#badgePanel'); if(!host) return;
+  const n=Object.keys(state.prefs.badges).length;
+  host.innerHTML=`<p class="small badge-intro">${n===BADGES.length?'All badges collected. You are the final boss.':`${BADGES.length-n} still locked. The instructions are right there, sweetheart.`}</p><div class="badge-cells">`+
+    BADGES.map(b=>state.prefs.badges[b.id]
+      ?`<div class="badge-cell unlocked"><span class="b-ico">${b.icon}</span><b>${esc(b.name)}</b><span class="small">${esc(b.line)}</span></div>`
+      :`<div class="badge-cell"><span class="b-ico">?</span><b>???</b><span class="small">${esc(b.how)}</span></div>`).join('')+'</div>';
+}
+function toggleBadgePanel(){ const panel=$('#badgePanel'); const btn=$('#aboutRow'); if(!panel) return; const open=panel.hidden; if(open) renderBadgePanel(); panel.hidden=!open; btn?.setAttribute('aria-expanded', String(open)); }
+
+/* Low power mode: kills backdrop-filter blur (the main GPU/battery drain on old Android),
+   confetti and long transitions. Auto-enabled on weak devices, manual toggle in Settings. */
+function applyLowPower(){ document.body.classList.toggle('lite', !!state.prefs.lowPower); const t=$('#lowPowerToggle'); if(t) t.checked=!!state.prefs.lowPower; }
+
+function renderProfile(){
+  const p=state.prefs.profile||{};
+  const set=(id,v)=>{ const el=$('#'+id); if(el) el.value=v??''; };
+  set('pHeight',p.height); set('pWeight',p.weight); set('pAge',p.age);
+  $$('#sexSeg [data-sex]').forEach(b=>{ const on=b.dataset.sex===p.sex; b.classList.toggle('active',on); b.setAttribute('aria-pressed',String(on)); });
+}
+function collectProfile(){
+  const p=state.prefs.profile;
+  p.height=clamp($('#pHeight')?.value||173,120,230);
+  p.weight=Math.max(30,Number($('#pWeight')?.value)||76);
+  p.age=clamp($('#pAge')?.value||24,10,100);
+  saveLocal(false);
+  dirty.train=true; // goal suggestions depend on profile weight
+}
 function setShowRir(on){
   state.prefs.showRir = !!on;
   $('#exerciseList')?.classList.toggle('advanced', state.prefs.showRir);
@@ -171,7 +291,7 @@ function localStateSnapshot(){
     deleteMeta:state.deleteMeta||{},
     lastSyncAt:state.lastSyncAt,
     lastSyncError:state.lastSyncError,
-    preferences:{theme:state.prefs.theme, showRir:state.prefs.showRir, usedAutofill:state.prefs.usedAutofill},
+    preferences:{theme:state.prefs.theme, showRir:state.prefs.showRir, usedAutofill:state.prefs.usedAutofill, badges:state.prefs.badges, lowPower:state.prefs.lowPower, profile:state.prefs.profile},
     week:state.week,
     day:state.day
   };
@@ -181,6 +301,14 @@ function loadLocal(){
   let raw=store.getItem(STORE_KEY), parsed=null;
   if(!raw){ for(const k of LEGACY_KEYS){ raw=store.getItem(k); if(raw) break; } }
   if(raw){ try{ parsed=JSON.parse(raw); }catch(e){ parsed=null; } }
+  state.prefs.badges={};
+  const savedBadges=parsed?.preferences?.badges;
+  if(savedBadges && typeof savedBadges==='object'){ for(const b of BADGES){ if(savedBadges[b.id]) state.prefs.badges[b.id]=savedBadges[b.id]; } }
+  /* Low power defaults ON for weak hardware: ≤2 GB RAM or ≤3 cores. Manual toggle wins once set. */
+  const weakDevice=(navigator.deviceMemory && navigator.deviceMemory<=2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency<=3);
+  state.prefs.lowPower = parsed?.preferences?.lowPower!=null ? !!parsed.preferences.lowPower : !!weakDevice;
+  const prof=parsed?.preferences?.profile||{};
+  state.prefs.profile={height:clamp(prof.height||173,120,230), weight:Math.max(30,Number(prof.weight)||76), age:clamp(prof.age||24,10,100), sex:prof.sex==='f'?'f':'m'};
   setTheme(parsed?.preferences?.theme || parsed?.theme || 'auto');
   state.prefs.showRir = !!parsed?.preferences?.showRir;
   state.prefs.usedAutofill = !!parsed?.preferences?.usedAutofill;
@@ -199,6 +327,10 @@ function loadLocal(){
   pruneQueues();
   saveLocal(false);
   try{ const d=JSON.parse(store.getItem(DRAFT_KEY)||'null'); state.draft=d&&typeof d==='object'?{...createDraft(),...d,meta:normalizeMeta(d.meta||{})}:createDraft(); }catch(e){ initDraft(); }
+  // Restore edit mode across reloads — otherwise saving a restored draft duplicates the workout being edited.
+  const draftEdit = state.draft?.editId ? String(state.draft.editId) : null;
+  state.editId = draftEdit && state.sessions.some(s=>String(s.id)===draftEdit) ? draftEdit : null;
+  if(!state.editId && state.draft) delete state.draft.editId;
 }
 /* Draft writes are debounced: state.draft is always current in memory, storage catches up
    after a pause in typing and is flushed when the page is hidden or closed. */
@@ -209,7 +341,7 @@ function cancelDraftSave(){ clearTimeout(draftSaveTimer); draftSaveTimer=null; }
 function clearDraft(){ state.editId=null; initDraft(); cancelDraftSave(); store.removeItem(DRAFT_KEY); stopRest(); state.exIndex=firstOpenIndex(); fillSessionFields(); renderWorkout(); renderTrainStatus(); }
 async function confirmClearDraft(){
   syncOpenBlock(); collectSessionFields();
-  const hasData=Object.keys(state.draft.exercises).length>0 || !!state.draft.notes || state.draft.bw!=null;
+  const hasData=Object.keys(state.draft.exercises).length>0 || !!state.draft.notes || state.draft.bw!=null || state.draft.meta.energy!=null || state.draft.meta.sleep!=null;
   if(hasData){ const ok=await modal({title:'Clear draft?',message:state.editId?'This stops editing and discards the unsaved changes on this device. The saved workout is not affected.':'This removes all unsaved sets and session info on this device. Saved workouts are not affected.',danger:true,confirmText:'Clear draft'}); if(!ok) return; }
   clearDraft(); if(hasData) toast('Draft cleared');
 }
@@ -249,9 +381,9 @@ function setPage(page){
 function renderTrain(){ dirty.train=false; const list=currentExercises(); if(state.exIndex>=list.length) state.exIndex=firstOpenIndex(); $('#weekNumber').textContent=state.week; renderDayTabs(); fillSessionFields(); renderWorkout(); renderTrainStatus(); }
 function renderDayTabs(){ $('#dayTabs').innerHTML = state.split.map(d=>`<button class="chip ${d===state.day?'active':''}" data-day="${esc(d)}" type="button" role="tab" aria-selected="${d===state.day}">${esc(d)}</button>`).join(''); }
 function completedCount(){ return currentExercises().filter(ex => (state.draft.exercises[ex.name]?.sets||[]).some(s=>s.reps>0)).length; }
-function renderTrainStatus(){ const total=currentExercises().length, done=completedCount(); const light=(state.program?.lightWeeks||[]).includes(state.week); $('#trainTitle').textContent=state.day; $('#trainSub').textContent=`${done}/${total} logged${light?' · light week':''}`; $('#workoutProgress').style.width= total ? `${done/total*100}%` : '0%'; }
+function renderTrainStatus(){ const total=currentExercises().length, done=completedCount(); const light=(state.program?.lightWeeks||[]).includes(state.week); $('#trainTitle').textContent=state.day; $('#trainSub').textContent=`${done}/${total} logged${light?' · light week':''}${state.editId?' · editing':''}`; $('#workoutProgress').style.width= total ? `${done/total*100}%` : '0%'; const saveBtn=$('#saveWorkout'); if(saveBtn) saveBtn.textContent=state.editId?'Update workout':'Save workout'; }
 function lastBodyweight(){ const list=activeSessionsAsc(); for(let i=list.length-1;i>=0;i--){ if(Number(list[i].bw)>0) return list[i].bw; } return null; }
-function fillSessionFields(){ const lastBw=lastBodyweight(); $('#sDate').value=state.draft.date||localDate(); $('#sBw').value=state.draft.bw??''; $('#sBw').placeholder=lastBw?`${round(lastBw)} kg`:'kg'; $('#sNotes').value=state.draft.notes||''; $('#sEnergy').value=state.draft.meta.energy??''; $('#sSleep').value=state.draft.meta.sleep??''; }
+function fillSessionFields(){ const lastBw=lastBodyweight()||state.prefs.profile?.weight; $('#sDate').value=state.draft.date||localDate(); $('#sBw').value=state.draft.bw??''; $('#sBw').placeholder=lastBw?`${round(lastBw)} kg`:'kg'; $('#sNotes').value=state.draft.notes||''; $('#sEnergy').value=state.draft.meta.energy??''; $('#sSleep').value=state.draft.meta.sleep??''; }
 function collectSessionFields(){ state.draft.date=$('#sDate').value||localDate(); state.draft.bw=$('#sBw').value===''?null:Math.max(0,Number($('#sBw').value)||0); state.draft.notes=$('#sNotes').value.trim().slice(0,180); state.draft.meta.energy=$('#sEnergy').value?clamp($('#sEnergy').value,1,5):null; state.draft.meta.sleep=$('#sSleep').value?clamp($('#sSleep').value,1,5):null; saveDraft(); }
 
 /* ---- Logbook view: the whole day as one checklist, one exercise expanded at a time ---- */
@@ -286,7 +418,7 @@ function renderWorkout(){
 function renderExBody(ex,last){
   const saved=draftSetsFor(ex.name);
   const unitPh = ex.timed?'sec':'reps';
-  const running = !!restInterval && restExName===ex.name;
+  const running = restActive && restExName===ex.name;
   let sets=''; for(let i=0;i<ex.sets;i++){
     const s=saved[i] || {}; const prev=last?.sets?.[i] || null;
     const phLoad = prev && prev.load>0 ? String(round(prev.load)) : 'kg';
@@ -298,13 +430,55 @@ function renderExBody(ex,last){
       <div class="goal-box"><span>Target ${esc(ex.reps)} \u00b7 RIR ${esc(String(ex.rir||'\u2014').replace(/\s+/g,''))}</span>${esc(makeGoal(ex,last))}</div>
       <button class="rest-btn ${running?'running':''}" data-rest type="button" aria-label="Rest timer">${running?'\u2026':'Rest '+esc(ex.rest||'2 min')}</button>
     </div>
-    <p class="last-line">${last?`Last time <b>${last.sets.map(setLabel).map(esc).join(' \u00b7 ')}</b> \u00b7 ${esc(shortDate(last.date))}`:'First session \u2014 set your baseline.'}</p>
+    <p class="last-line">${last?`Last time <b>${last.sets.map(setLabel).map(esc).join(' \u00b7 ')}</b> \u00b7 ${esc(shortDate(last.date))}${last.e1rm>0?` \u00b7 e1RM ${round(last.e1rm)} kg`:''}`:'First session \u2014 set your baseline.'}</p>
     <div class="sets">${sets}</div>
     ${last && !state.prefs.usedAutofill?'<p class="hint">Tap a set number to fill in last time\u2019s numbers.</p>':''}
     <details class="tech"><summary>Technique</summary><div><p><b>Technique:</b> ${esc(ex.note||'\u2014')}</p><p><b>Substitutions:</b> ${(ex.substitutions||[]).map(esc).join(' \u00b7 ')||'\u2014'}</p></div></details>
   </div>`;
 }
-function makeGoal(ex,last){ if(!last) return 'Start clean, log consistent reps.'; const b=last.best; const top=String(ex.reps||'').match(/(\d+)-(\d+)/); if(b.load>0 && top && b.reps>=Number(top[2])) return `Try ${round(b.load+2.5)} kg \u00d7 ${top[1]}`; if(b.load>0) return `Beat ${round(b.load)} kg \u00d7 ${round(b.reps)}`; return `Beat ${round(b.reps)} ${ex.timed?'sec':'reps'}`; }
+/* Starting-weight estimates for the first session of an exercise: typical novice working
+   weights as a fraction of bodyweight (male; ~0.8\u00d7 for female). Fractions are per-implement
+   (per dumbbell / per cable handle) for unilateral moves. Order matters \u2014 specific patterns
+   (leg curl, kickback) must match before generic ones (curl, triceps). */
+const START_FRACTIONS=[
+  [/leg curl/, .4],[/leg extension/, .55],[/leg press/, 1.4],[/calf/, .9],
+  [/hip thrust/, 1.0],[/rdl|deadlift/, .85],[/squat/, .8],
+  [/incline press/, .5],[/chest press|bench press/, .55],
+  [/pulldown/, .6],[/t-bar row|row/, .5],[/shrug/, .8],
+  [/lateral raise/, .08],[/y-raise/, .06],[/reverse pec|rear delt|reverse.*flye/, .3],
+  [/crunch/, .35],[/kickback/, .1],[/triceps/, .18],
+  [/wrist/, .1],[/zottman|hammer/, .12],[/curl/, .14],
+  [/pull-up|chin-up|dead hang/, 0]
+];
+function startingWeight(name){
+  const p=state.prefs.profile||{};
+  const bw=Number(lastBodyweight())||Number(p.weight)||76;
+  const sexAdj=p.sex==='f'?0.8:1;
+  const n=String(name).toLowerCase();
+  for(const [re,frac] of START_FRACTIONS){ if(re.test(n)) return frac?plateRound(bw*frac*sexAdj):0; }
+  return 0;
+}
+/* Goal line: personalized double progression.
+   - no history: bodyweight-scaled starting weight (or a clean-baseline cue)
+   - plateau/regression: 10% reset, rebuild through the rep range
+   - top of the rep range hit: add a plate step, drop back to the bottom of the range
+   - otherwise: same load, one more rep */
+function makeGoal(ex,last){
+  const range=String(ex.reps||'').match(/(\d+)\s*-\s*(\d+)/);
+  const low=range?Number(range[1]):6, high=range?Number(range[2]):10;
+  if(!last){
+    if(ex.timed) return 'Set a baseline hold.';
+    if(isBodyweightExercise(ex.name)) return `Bodyweight \u2014 aim ${low}+ clean reps`;
+    const est=startingWeight(ex.name);
+    return est?`Start ~${est} kg \u00d7 ${low}, leave 3 in the tank`:'Start clean, log consistent reps.';
+  }
+  const b=last.best;
+  if(!(b.load>0)) return `Beat ${round(b.reps)} ${ex.timed?'sec':'reps'}${isBodyweightExercise(ex.name)&&!ex.timed?` \u2014 add weight past ${high}`:''}`;
+  const sum=summaryForExercise(ex.name);
+  if(sum && (sum.plateau||sum.regressing)) return `Reset: ${plateRound(b.load*0.9)} kg \u00d7 ${high}, then climb`;
+  if(b.reps>=high) return `Go up: ${plateRound(b.load+(b.load>=60?2.5:1.25))} kg \u00d7 ${low}`;
+  return `Aim ${round(b.load)} kg \u00d7 ${Math.min(high, Math.floor(b.reps)+1)}`;
+}
 function updateSetsFor(block){
   if(!block) return;
   const name=block.dataset.ex; const meta=findExerciseMeta(name); const sets=[];
@@ -325,13 +499,18 @@ function toggleExercise(i){
 function applyQuick(card, action){ if(!card) return; const block=card.closest('.ex-block'); const name=block?.dataset.ex; if(!name) return; const load=$('[data-field="load"]',card), reps=$('[data-field="reps"]',card), idx=Number(card.dataset.set), last=exerciseEntries(name).slice(-1)[0]?.sets?.[idx] || null; if(action==='same'){ if(!last) return toast('No previous set'); load.value=last.load||''; reps.value=last.reps||''; haptic(8); if(!state.prefs.usedAutofill){ state.prefs.usedAutofill=true; $$('.hint').forEach(h=>h.remove()); saveLocal(false); } } if(action==='clearSet'){ load.value=''; reps.value=''; const rir=$('[data-field="rir"]',card); if(rir) rir.value=''; } updateSetsFor(block); }
 
 /* Rest timer \u2014 parses the plan's rest range, keeps running while you browse, vibrates when done. */
-let restInterval=null, restEndsAt=0, restExName='';
+let restInterval=null, restEndsAt=0, restExName='', restActive=false;
 function parseRestSeconds(rest){ const range=String(rest||'').match(/(\d+)\s*-\s*(\d+)/); const single=String(rest||'').match(/\d+/); const mins=range?Number(range[2]):(single?Number(single[0]):2); return clamp(mins,1,10)*60; }
 function currentRestBtn(){ const block=$('#exerciseList .ex-block.open'); return block && block.dataset.ex===restExName ? $('[data-rest]',block) : null; }
 function restPill(){ return $('#restPill'); }
-function stopRest(){ if(restInterval){ clearInterval(restInterval); restInterval=null; } const b=currentRestBtn(); if(b){ b.classList.remove('running'); const meta=findExerciseMeta(restExName); b.textContent=`Rest ${meta.rest||'2 min'}`; } const pill=restPill(); if(pill) pill.hidden=true; restExName=''; }
-function tickRest(){ const left=Math.max(0,Math.round((restEndsAt-Date.now())/1000)); const label=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`; const b=state.page==='train'?currentRestBtn():null; const pill=restPill(); if(b){ b.textContent=label; if(pill) pill.hidden=true; } else if(pill){ pill.textContent=`Rest ${label}`; pill.hidden=false; } if(left<=0){ stopRest(); try{ navigator.vibrate?.([200,120,200]); }catch(e){} toast('Rest over \u2014 next set'); } }
-function toggleRest(btn){ const block=btn.closest('.ex-block'); const name=block?.dataset.ex; if(!name) return; if(restInterval && restExName===name) return stopRest(); if(restInterval) stopRest(); const meta=findExerciseMeta(name); restExName=name; restEndsAt=Date.now()+parseRestSeconds(meta.rest)*1000; btn.classList.add('running'); tickRest(); restInterval=setInterval(tickRest,250); }
+/* The ticker is separate from the timer: the end time is a timestamp, so the interval can be
+   stopped while the app is hidden (screen off, other tab) and restarted on return without
+   losing accuracy. 500 ms is enough for a 1 s countdown; DOM writes only happen on change. */
+function startRestTicker(){ if(!restInterval){ tickRest(); if(restActive) restInterval=setInterval(tickRest,500); } }
+function stopRestTicker(){ if(restInterval){ clearInterval(restInterval); restInterval=null; } }
+function stopRest(){ stopRestTicker(); const b=currentRestBtn(); if(b){ b.classList.remove('running'); const meta=findExerciseMeta(restExName); b.textContent=`Rest ${meta.rest||'2 min'}`; } const pill=restPill(); if(pill) pill.hidden=true; restActive=false; restExName=''; }
+function tickRest(){ const left=Math.max(0,Math.round((restEndsAt-Date.now())/1000)); const label=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`; const b=state.page==='train'?currentRestBtn():null; const pill=restPill(); if(b){ if(b.textContent!==label) b.textContent=label; if(pill) pill.hidden=true; } else if(pill){ const t=`Rest ${label}`; if(pill.textContent!==t) pill.textContent=t; pill.hidden=false; } if(left<=0){ stopRest(); try{ navigator.vibrate?.([200,120,200]); }catch(e){} toast('Rest over \u2014 next set'); } }
+function toggleRest(btn){ const block=btn.closest('.ex-block'); const name=block?.dataset.ex; if(!name) return; if(restActive && restExName===name) return stopRest(); if(restActive) stopRest(); const meta=findExerciseMeta(name); restExName=name; restActive=true; restEndsAt=Date.now()+parseRestSeconds(meta.rest)*1000; btn.classList.add('running'); startRestTicker(); }
 function shiftWeek(n){ state.week=clamp(state.week+n,1,state.program?.weeks||12); saveLocal(); renderTrainStatus(); $('#weekNumber').textContent=state.week; }
 
 function bestValue(sets){ return Math.max(0,...(sets||[]).map(s=>e1rm(s)||Number(s.reps)||0)); }
@@ -377,6 +556,7 @@ async function saveWorkout(){
     }
     const prs=detectPRs(session);
     const idx=state.sessions.findIndex(s=>s.id===session.id);
+    const wasNew=idx<0;
     if(idx>=0) state.sessions[idx]=session; else state.sessions.push(session);
     if(state.pendingDeletes.has(String(session.id))) unqueueDelete(session.id);
     queueUpsert(session.id);
@@ -387,9 +567,13 @@ async function saveWorkout(){
     state.exIndex=firstOpenIndex();
     saveLocal(); dataChanged();
     haptic(prs.length?[15,70,15]:12);
+    if(prs.length) confetti();
+    const milestone=wasNew?milestoneMessage(session):'';
     const prMsg=prs.length?`🏆 PR · ${prs[0]}${prs.length>1?` +${prs.length-1} more`:''} — `:'';
     if(state.user){ const ok=await syncNow(false); toast(ok?`${prMsg}saved & synced`:`${prMsg}saved locally · sync pending`, ok?'':'danger'); }
     else { toast(`${prMsg}saved locally`); }
+    if(milestone) setTimeout(()=>{ toast(milestone); confetti(36); haptic([12,60,12,60,12]); }, 1800);
+    if(wasNew){ const earned=checkBadges(buildBadgeCtx(session, prs)); if(earned.length) setTimeout(()=>revealBadges(earned), 900); }
   } finally {
     state.saving = false;
     if(saveBtn) saveBtn.disabled = false;
@@ -414,7 +598,10 @@ function renderHistory(){
   purgeQueuedLocalDeletes();
   const host=$('#logList'); if(!host) return;
   const list=[...activeSessionsAsc()].reverse();
-  if(!list.length){ host.innerHTML='<div class="empty">🏋️ No workouts yet.<br>Log your first sets in Train.</div>'; return; }
+  if(!list.length){
+    const lines=['Log your first sets in Train.','The best day to start was yesterday.<br>Second best: today.','Every legend’s logbook has a page one.','The iron is patient. It’ll wait — but not forever.'];
+    host.innerHTML=`<div class="empty">🏋️ No workouts yet.<br>${lines[new Date().getDate()%lines.length]}</div>`; return;
+  }
   const sigCount=new Map(); const sigs=new Map();
   for(const s of list){ const sig=sessionSignature(s); sigs.set(s,sig); sigCount.set(sig,(sigCount.get(sig)||0)+1); }
   const shown=list.slice(0, logVisibleCount);
@@ -478,11 +665,34 @@ async function deleteSession(id, card=null){
 }
 
 
-function editSession(id){ const s=state.sessions.find(x=>x.id===id); if(!s) return; state.editId=s.id; state.week=s.week; state.day=s.day; state.exIndex=0; state.draft={date:s.date,bw:s.bw,notes:s.notes,meta:normalizeMeta(s.meta),exercises:Object.fromEntries(s.exercises.map(e=>[e.name,{sets:e.sets}]))}; setPage('train'); renderTrain(); toast('Editing workout'); }
+function editSession(id){ const s=state.sessions.find(x=>x.id===id); if(!s) return; state.editId=s.id; state.week=s.week; state.day=s.day; state.exIndex=0; state.draft={date:s.date,bw:s.bw,notes:s.notes,meta:normalizeMeta(s.meta),exercises:Object.fromEntries(s.exercises.map(e=>[e.name,{sets:e.sets}])),editId:s.id}; flushDraft(); setPage('train'); renderTrain(); toast('Editing workout'); }
 
 function setLabel(s){ const load=Number(s.load)||0, reps=round(s.reps); const base=load>0 ? `${round(load)}×${reps}` : `${reps} ${s.timed?'sec':'reps'}`; return `${base}${s.rir!=null?` · RIR ${s.rir}`:''}`; }
 function bestSet(sets){ return [...sets].sort((a,b)=>{ const av=metricSet(a,'e1rm')||metricSet(a,'reps'); const bv=metricSet(b,'e1rm')||metricSet(b,'reps'); return bv-av; })[0] || null; }
-function e1rm(s){ return s && s.load>0 ? s.load*(1+s.reps/30) : 0; }
+/* Estimated 1RM: mean of Epley and Brzycki (Epley alone overshoots at high reps, Brzycki
+   undershoots), with logged RIR folded in as reps-in-the-tank — a set of 8 @ RIR 2 reflects
+   the same strength as 10 to failure. Reps capped where the formulas stay reliable. */
+function e1rm(s){
+  const load=Number(s?.load)||0;
+  if(load<=0) return 0;
+  let reps=Math.min(Number(s.reps)||0, 15);
+  if(s.rir!=null && s.rir!=='') reps=Math.min(reps + clamp(s.rir,0,4), 16);
+  if(reps<=0) return 0;
+  if(reps===1) return load;
+  return (load*(1+reps/30) + load*36/(37-reps)) / 2;
+}
+/* Least-squares slope over the last 6 entries, as % of their mean per entry —
+   a noise-tolerant trend signal for plateau/regression detection. */
+function trendSlope(vals){
+  const v=vals.slice(-6), n=v.length;
+  if(n<3) return 0;
+  const mx=(n-1)/2, my=v.reduce((a,b)=>a+b,0)/n;
+  let num=0, den=0;
+  for(let i=0;i<n;i++){ num+=(i-mx)*(v[i]-my); den+=(i-mx)*(i-mx); }
+  const slope=den?num/den:0;
+  return my?slope/my*100:0;
+}
+function plateRound(v){ v=Math.max(0,Number(v)||0); const step=v>=20?2.5:1.25; return Math.round(v/step)*step; }
 function bodyweightForSession(session){ return Number(session?.bw)||0; }
 function setVolume(s, name, session){ const bw=isBodyweightExercise(name)?bodyweightForSession(session):0; return ((Number(s.load)||0) + bw) * (Number(s.reps)||0); }
 function metricSet(s, metric){ if(metric==='load') return Number(s.load)||0; if(metric==='reps') return Number(s.reps)||0; if(metric==='e1rm') return e1rm(s); return Number(s.load||0)*Number(s.reps||0); }
@@ -502,7 +712,7 @@ function autoMetric(name){ const hasLoad=exerciseEntries(name).some(e=>e.load>0)
 function valueForEntry(e, metric){ if(metric==='load') return e.load; if(metric==='reps') return e.reps; if(metric==='volume') return e.volume; return e.e1rm || e.reps; }
 function unitForMetric(metric){ if(metric==='volume') return 'kg×reps'; if(metric==='reps') return 'reps/sec'; return 'kg'; }
 function allSummaries(){ return exerciseNames().map(name=>summaryForExercise(name)).filter(Boolean); }
-function summaryForExercise(name){ if(summaryCache.has(name)) return summaryCache.get(name); const entries=exerciseEntries(name); let out=null; if(entries.length){ const metric=autoMetric(name), vals=entries.map(e=>valueForEntry(e,metric)), best=Math.max(...vals), latest=vals[vals.length-1], first=vals[0], change=latest-first, percent=first?change/first*100:0; const lastBestIndex=vals.lastIndexOf(best); const noNewHigh=entries.length-1-lastBestIndex; const recent=vals.slice(-4); const slope=recent.length>=2?recent[recent.length-1]-recent[0]:0; const plateau=entries.length>=4 && (noNewHigh>=3 || (slope<=0 && latest < best*0.98)); out={name, entries:entries.length, metric, unit:unitForMetric(metric), best, latest, first, change, percent, noNewHigh, plateau}; } summaryCache.set(name, out); return out; }
+function summaryForExercise(name){ if(summaryCache.has(name)) return summaryCache.get(name); const entries=exerciseEntries(name); let out=null; if(entries.length){ const metric=autoMetric(name), vals=entries.map(e=>valueForEntry(e,metric)), best=Math.max(...vals), latest=vals[vals.length-1], first=vals[0], change=latest-first, percent=first?change/first*100:0; const lastBestIndex=vals.lastIndexOf(best); const noNewHigh=entries.length-1-lastBestIndex; const trend=trendSlope(vals); const plateau=entries.length>=4 && noNewHigh>=3 && trend<0.35; const regressing=entries.length>=5 && trend<=-1 && latest<best*0.97; out={name, entries:entries.length, metric, unit:unitForMetric(metric), best, latest, first, change, percent, noNewHigh, trend, plateau, regressing}; } summaryCache.set(name, out); return out; }
 function renderProgress(){
   dirty.progress=false;
   const names=exerciseNames();
@@ -514,7 +724,7 @@ function renderProgress(){
   if(state.progressView==='overall') renderOverall(); else renderExerciseProgress(state.progressExercise);
 }
 
-function renderOverall(){ $('#progressControls').style.display='none'; $('#viewOverall').classList.add('active'); $('#viewExercise').classList.remove('active'); const sessions=[...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id))).sort((a,b)=>new Date(a.date)-new Date(b.date)); const summaries=allSummaries(); const totalSets=sessions.reduce((sum,s)=>sum+s.exercises.reduce((a,e)=>a+e.sets.length,0),0); const volume=sessions.map(s=>s.exercises.reduce((sum,e)=>sum+e.sets.reduce((a,set)=>a+setVolume(set,e.name,s),0),0)); const weak=summaries.filter(x=>x.plateau); const improving=summaries.filter(x=>x.percent>0); renderStats([['Workouts',sessions.length],['Sets',totalSets],['Improving',improving.length],['Plateaus',weak.length]]); $('#chartTitle').textContent='Overall workload'; $('#chartSubtitle').textContent=sessions.length?`Last ${Math.min(18,sessions.length)} workouts · kg×reps`:''; drawChart(volume, sessions.map(s=>s.date), 'kg×reps'); renderInsights(); $('#listTitle').textContent='Exercise summary'; $('#progressList').innerHTML=summaries.length?summaries.sort((a,b)=>b.percent-a.percent).map(s=>`<div class="progress-row"><div><b>${esc(s.name)}</b><div class="small">${s.entries} logs · best ${round(s.best)} ${esc(s.unit)}</div></div><div class="metric">${s.percent>=0?'+':''}${round(s.percent)}%</div></div>`).join(''):'<div class="empty">No progress yet. Save a workout first.</div>'; }
+function renderOverall(){ $('#progressControls').style.display='none'; $('#viewOverall').classList.add('active'); $('#viewExercise').classList.remove('active'); const sessions=[...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id))).sort((a,b)=>new Date(a.date)-new Date(b.date)); const summaries=allSummaries(); const totalSets=sessions.reduce((sum,s)=>sum+s.exercises.reduce((a,e)=>a+e.sets.length,0),0); const volume=sessions.map(s=>s.exercises.reduce((sum,e)=>sum+e.sets.reduce((a,set)=>a+setVolume(set,e.name,s),0),0)); const weak=summaries.filter(x=>x.plateau||x.regressing); const improving=summaries.filter(x=>x.percent>0); renderStats([['Workouts',sessions.length],['Sets',totalSets],['Improving',improving.length],['Plateaus',weak.length]]); $('#chartTitle').textContent='Overall workload'; $('#chartSubtitle').textContent=sessions.length?`Last ${Math.min(18,sessions.length)} workouts · kg×reps`:''; drawChart(volume, sessions.map(s=>s.date), 'kg×reps'); renderInsights(); $('#listTitle').textContent='Exercise summary'; $('#progressList').innerHTML=summaries.length?summaries.sort((a,b)=>b.percent-a.percent).map(s=>`<div class="progress-row"><div><b>${esc(s.name)}</b><div class="small">${s.entries} logs · best ${round(s.best)} ${esc(s.unit)}</div></div><div class="metric">${s.percent>=0?'+':''}${round(s.percent)}%</div></div>`).join(''):'<div class="empty">No progress yet. Save a workout first.</div>'; }
 function renderExerciseProgress(name){ $('#progressControls').style.display='grid'; $('#viewOverall').classList.remove('active'); $('#viewExercise').classList.add('active'); if(!name){ renderStats([['Best','—'],['Latest','—'],['Change','—'],['Entries',0]]); $('#chartBox').innerHTML='<div class="empty">No chart data.</div>'; renderInsights(); return; } const metric=$('#progressMetric').value==='auto'?autoMetric(name):$('#progressMetric').value; const entries=exerciseEntries(name); const vals=entries.map(e=>valueForEntry(e,metric)); const unit=unitForMetric(metric); const best=vals.length?Math.max(...vals):0, latest=vals[vals.length-1]||0, first=vals[0]||0, change=latest-first; renderStats([['Best',`${round(best)} ${unit}`],['Latest',`${round(latest)} ${unit}`],['Change',`${change>=0?'+':''}${round(change)} ${unit}`],['Entries',entries.length]]); $('#chartTitle').textContent=`${name} · ${metric==='e1rm'?'Estimated 1RM':metric}`; $('#chartSubtitle').textContent=`Last ${Math.min(18, entries.length)} entries`; drawChart(vals, entries.map(e=>e.date), unit); renderInsights(name); $('#listTitle').textContent='Recent entries'; $('#progressList').innerHTML=entries.slice(-12).reverse().map(e=>`<div class="progress-row"><div><b>${esc(fmtDate(e.date))}</b><div class="small">Best set: ${setLabel(e.best)}</div></div><div class="metric">${round(valueForEntry(e,metric))} ${unit}</div></div>`).join('') || '<div class="empty">No entries.</div>'; }
 function renderStats(rows){ $('#statsGrid').innerHTML=rows.map(([l,v])=>`<div class="stat"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join(''); }
 /* Chart is drawn in real pixel space (no viewBox stretching), so points stay round,
@@ -555,7 +765,7 @@ function drawChart(values, labels, unit){
     <text class="axis-label" x="${W-padR}" y="${H-8}" text-anchor="end">${esc(shortDate(ls[ls.length-1]))}</text>
   </svg>`;
 }
-function renderInsights(selected=''){ const sums=allSummaries(); const achievements=sums.filter(x=>x.percent>0).sort((a,b)=>b.percent-a.percent).slice(0,4); const weak=sums.filter(x=>x.plateau).sort((a,b)=>b.noNewHigh-a.noNewHigh||a.percent-b.percent).slice(0,4); $('#recordsPanel').innerHTML='<h2>Records & achievements</h2>'+(achievements.length?achievements.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">Best ${round(x.best)} ${esc(x.unit)} · ${x.entries} entries</div></div><div class="metric">+${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No positive trend yet.</p>'); $('#weakPanel').innerHTML='<h2>Weak points</h2>'+(weak.length?weak.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">No new high for ${x.noNewHigh} entries · latest ${round(x.latest)} ${esc(x.unit)}</div></div><div class="metric">${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No plateau detected.</p>'); }
+function renderInsights(selected=''){ const sums=allSummaries(); const achievements=sums.filter(x=>x.percent>0).sort((a,b)=>b.percent-a.percent).slice(0,4); const weak=sums.filter(x=>x.plateau||x.regressing).sort((a,b)=>b.noNewHigh-a.noNewHigh||a.percent-b.percent).slice(0,4); $('#recordsPanel').innerHTML='<h2>Records & achievements</h2>'+(achievements.length?achievements.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">Best ${round(x.best)} ${esc(x.unit)} · ${x.entries} entries</div></div><div class="metric">+${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No positive trend yet.</p>'); $('#weakPanel').innerHTML='<h2>Weak points</h2>'+(weak.length?weak.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">${x.regressing?'Trending down':`No new high for ${x.noNewHigh} entries`} · latest ${round(x.latest)} ${esc(x.unit)}</div></div><div class="metric">${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No plateau detected.</p>'); }
 
 /* The Supabase SDK (~120 KB gz) is injected only when actually needed — a stored auth
    session exists or the user taps Sign in — instead of being parsed on every startup. */
@@ -579,7 +789,7 @@ function cloudErrorText(error){ return String(error?.message || error?.details |
 function toDb(s){ return {id:String(s.id),user_id:state.user.id,date:s.date,week:s.week,day:s.day,bw:s.bw,notes:s.notes,exercises:s.exercises,meta:s.meta||{},updated_at:updatedAt(s),deleted_at:null}; }
 function fromDb(r){ if(!r || r.deleted_at) return null; return normalizeSession({id:r.id,user_id:r.user_id,date:r.date,week:r.week,day:r.day,bw:r.bw,notes:r.notes,exercises:r.exercises,meta:r.meta||{},updated_at:r.updated_at,deleted_at:r.deleted_at}); }
 function deleteTombstoneRow(id){ const meta=state.deleteMeta[String(id)]||{}; const snap=meta.snapshot||{}; const deletedAtValue=meta.deletedAt||nowIso(); return {id:String(id),user_id:state.user.id,date:snap.date||localDate(),week:clamp(snap.week||1,1,12),day:state.split.includes(snap.day)?snap.day:(state.split[0]||'Full Body'),bw:snap.bw??null,notes:snap.notes||'',exercises:Array.isArray(snap.exercises)?snap.exercises:[],meta:normalizeMeta(snap.meta||{}),updated_at:deletedAtValue,deleted_at:deletedAtValue}; }
-async function initAuth(){ if(!hasStoredSupabaseSession()){ renderAuth(); renderSyncChip(); return; } const sb=await getSupabase(); if(!sb){ renderAuth(); renderSyncChip(); return; } const {data}=await sb.auth.getUser(); state.user=data?.user||null; sb.auth.onAuthStateChange((ev,session)=>{ state.user=session?.user||null; renderAuth(); renderSyncChip(); if(state.user) syncNow(false); }); renderAuth(); renderSyncChip(); if(state.user) await syncNow(false); }
+async function initAuth(){ if(!hasStoredSupabaseSession()){ renderAuth(); renderSyncChip(); return; } const sb=await getSupabase(); if(!sb){ renderAuth(); renderSyncChip(); return; } /* getSession reads local storage, so a signed-in user stays signed in when the app starts offline */ const {data}=await sb.auth.getSession(); state.user=data?.session?.user||null; sb.auth.onAuthStateChange((ev,session)=>{ state.user=session?.user||null; renderAuth(); renderSyncChip(); if(state.user) syncNow(false); }); renderAuth(); renderSyncChip(); if(state.user) await syncNow(false); }
 function renderAuth(){ const el=$('#authBox'); if(!el) return; if(state.user){ const email=state.user.email||'Signed in'; el.innerHTML=`<div class="account-row"><span class="avatar" aria-hidden="true">${esc((email[0]||'?').toUpperCase())}</span><div class="account-id"><b>${esc(email)}</b><span class="small">Synced with Supabase</span></div></div><div class="grid2" style="margin-top:14px"><button class="btn primary" id="syncNow" type="button">Sync Now</button><button class="btn danger-outline" id="signOut" type="button">Sign Out</button></div>`; } else { el.innerHTML=`<h2>Cloud Sync</h2><p class="small" style="margin-top:2px">Sign in to back up workouts and sync across devices.</p><div class="auth-fields" style="margin-top:12px"><label>Email<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••"></label></div><div class="grid2" style="margin-top:12px"><button class="btn primary" id="signIn" type="button">Sign In</button><button class="btn secondary" id="signUp" type="button">Create Account</button></div>`; } }
 function renderSyncChip(){ const chip=$('#syncChip'); if(!chip) return; const offline=typeof navigator!=='undefined' && navigator.onLine===false; const pending=pendingDeleteCount()+pendingUpsertCount(); if(offline){ chip.className='status-pill warn'; chip.textContent=pending?`Offline · ${pending} pending`:'Offline'; return; } chip.className='status-pill '+(state.user?(pending?'warn':'ok'):(pending?'warn':'')); chip.textContent = state.user ? (pending?`Cloud · ${pending} pending`:'Cloud synced') : (pending?`${pending} pending`:'Local'); }
 function setAuthBusy(on){ state.authBusy=!!on; ['signIn','signUp'].forEach(id=>{ const b=$('#'+id); if(b) b.disabled=state.authBusy; }); }
@@ -623,7 +833,7 @@ async function syncNow(show=true){
   }
 }
 function renderDiagnostics(){ const el=$('#diagnostics'); if(!el) return; const rows=[['Mode',state.user?'Cloud':'Local only'],['Local workouts',state.sessions.filter(s=>!state.pendingDeletes.has(String(s.id))).length],['Pending uploads',pendingUpsertCount()],['Pending deletes',pendingDeleteCount()],['Last sync',state.lastSyncAt?new Date(state.lastSyncAt).toLocaleString():'Never'],['Schema','soft-delete clean sync'],['Last error',state.lastSyncError||'—']]; el.innerHTML=rows.map(([k,v])=>`<div class="diag-row"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join(''); renderSyncChip(); }
-function setAccordion(button, body, open){ if(!button || !body) return; button.setAttribute('aria-expanded', String(open)); const mark=button.querySelector('[data-mark], span'); if(mark) mark.textContent=open?'−':'+'; body.hidden = !open; }
+function setAccordion(button, body, open){ if(!button || !body) return; button.setAttribute('aria-expanded', String(open)); body.hidden = !open; }
 function toggleSessionInfo(){ state.sessionOpen=!state.sessionOpen; setAccordion($('#sessionToggle'), $('#sessionFields'), state.sessionOpen); }
 function toggleDiagnostics(){ const body=$('#diagnostics'); const btn=$('#diagnosticsToggle'); const open=!!body?.hidden; setAccordion(btn, body, open); }
 async function resetLocalData(){ const ok=await modal({title:'Reset local data?',message:'This clears only this device. Cloud workouts stay in Supabase unless you use Erase all data.',danger:true,confirmText:'Reset local'}); if(!ok) return; state.sessions=[]; state.editId=null; invalidateDataCache(); clearDeleteQueue(); clearUpsertQueue(); clearDraft(); store.removeItem(STORE_KEY); saveLocal(); renderApp(); toast('Local data reset'); }
@@ -668,6 +878,8 @@ function registerEvents(){
     const viewBtn=e.target.closest('#viewOverall,#viewExercise'); if(viewBtn){ state.progressView=viewBtn.dataset.view; state.progressExercise=$('#progressExercise')?.value||state.progressExercise||''; renderProgress(); return; }
     const head=e.target.closest('.ex-head'); if(head){ toggleExercise(Number(head.dataset.exi)); return; }
     const rest=e.target.closest('[data-rest]'); if(rest){ toggleRest(rest); return; }
+    const sexBtn=e.target.closest('#sexSeg [data-sex]'); if(sexBtn){ state.prefs.profile.sex=sexBtn.dataset.sex==='f'?'f':'m'; renderProfile(); saveLocal(false); dirty.train=true; return; }
+    if(e.target.closest('#aboutRow')){ toggleBadgePanel(); return; }
     if(e.target.closest('#sessionToggle')){ toggleSessionInfo(); return; }
     if(e.target.closest('#diagnosticsToggle')){ toggleDiagnostics(); return; }
     if(e.target.id==='syncNow') return syncNow(); if(e.target.id==='signIn') return signIn(); if(e.target.id==='signUp') return signUp(); if(e.target.id==='signOut') return signOut();
@@ -675,12 +887,14 @@ function registerEvents(){
   $('#weekMinus').onclick=()=>shiftWeek(-1); $('#weekPlus').onclick=()=>shiftWeek(1); $('#saveWorkout').onclick=saveWorkout; $('#clearDraft').onclick=confirmClearDraft;
   const pill=$('#restPill'); if(pill) pill.onclick=()=>{ stopRest(); toast('Rest skipped'); };
   const rirBox=$('#rirToggle'); if(rirBox) rirBox.addEventListener('change', ()=>{ setShowRir(rirBox.checked); saveLocal(false); });
+  const lpBox=$('#lowPowerToggle'); if(lpBox) lpBox.addEventListener('change', ()=>{ state.prefs.lowPower=lpBox.checked; applyLowPower(); saveLocal(false); });
+  ['pHeight','pWeight','pAge'].forEach(id=>{ const el=$('#'+id); if(el) el.addEventListener('change', ()=>{ collectProfile(); renderProfile(); }); });
   let resizeT=null; window.addEventListener('resize', ()=>{ clearTimeout(resizeT); resizeT=setTimeout(()=>{ if(state.page==='progress' && lastChart) drawChart(lastChart.values, lastChart.labels, lastChart.unit); }, 160); });
   document.addEventListener('keydown', e=>{ if(e.key==='Enter' && (e.target.id==='authEmail' || e.target.id==='authPassword')){ e.preventDefault(); signIn(); } });
   window.addEventListener('online', ()=>{ renderSyncChip(); if(state.user && (pendingDeleteCount()+pendingUpsertCount())>0) syncNow(false); });
   window.addEventListener('offline', renderSyncChip);
   window.addEventListener('pagehide', flushDraft);
-  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') flushDraft(); });
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden'){ flushDraft(); stopRestTicker(); } else if(restActive){ startRestTicker(); } });
   $('#exerciseList').addEventListener('input', e=>{ const block=e.target.closest('.ex-block'); if(block) updateSetsFor(block); }); ['sDate','sBw','sNotes','sEnergy','sSleep'].forEach(id=>$('#'+id).addEventListener('input', collectSessionFields));
   $('#progressExercise').onchange=()=>{ state.progressExercise=$('#progressExercise').value; renderExerciseProgress(state.progressExercise); }; $('#progressMetric').onchange=()=>{ state.progressExercise=$('#progressExercise').value||state.progressExercise; renderExerciseProgress(state.progressExercise); }; $('#exportJson').onclick=exportJson; $('#exportCsv').onclick=exportCsv; $('#importJsonBtn').onclick=()=>$('#importFile').click(); $('#importFile').onchange=e=>{ if(e.target.files[0]) importJsonFile(e.target.files[0]); e.target.value='';}; $('#resetLocal').onclick=resetLocalData; $('#eraseAll').onclick=eraseAllData;
 }
@@ -698,6 +912,9 @@ async function registerServiceWorker(){
 function init(){
   try{
     loadProgramSync(); loadLocal(); fillSessionFields(); registerEvents(); renderApp(); setShowRir(state.prefs.showRir);
+    const av=$('#aboutVersion'); if(av) av.textContent=`v${APP_VERSION}`;
+    renderProfile(); renderBadgeCount(); applyLowPower();
+    try{ console.log('%c🏋️ MinMax Tracker','font-size:15px;font-weight:800;color:#007aff', `v${APP_VERSION} — ${BADGES.length} secret badges are hidden in here. No hints.`); }catch(e){}
   }catch(e){
     document.body.innerHTML=`<main class="shell"><section class="card"><h1>App failed to load</h1><p class="muted">${esc(e.message)}</p></section></main>`;
     return;

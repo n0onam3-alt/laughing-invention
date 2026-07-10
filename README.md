@@ -2,6 +2,57 @@
 
 Mobile-first PWA workout tracker for the Min-Max Program.
 
+## v17.3 "vault"
+Badge vault (replaces the gold champion mode):
+- 12 secret badges with hidden unlock conditions — locked slots show only "?"
+- full-screen animated reveal with confetti and haptics when one unlocks; multiple unlocks
+  queue up one after another
+- collection grid under Settings → About ("Badge vault · 🏅 x/12") — collect them all
+
+Battery / old-Android performance:
+- Low power mode (Settings → Preferences): disables backdrop-filter blur (the main GPU and
+  battery drain on older Android), confetti, and long transitions; auto-enabled on weak
+  devices (≤2 GB RAM or ≤3 cores), manual toggle always wins
+- rest timer ticks at 500 ms instead of 250 ms, writes to the DOM only when the label
+  changes, and fully stops while the app is hidden — the end time is a timestamp, so the
+  countdown stays accurate and fires the moment you come back
+
+## v17.2 "coach"
+Smarter numbers:
+- estimated 1RM upgraded: mean of Epley and Brzycki (each is biased alone), with logged RIR
+  counted as reps-in-the-tank — 8 reps @ RIR 2 scores like 10 to failure
+- plateau detection rebuilt on a least-squares trend over the last 6 entries; separate
+  "trending down" (regression) state shown in Weak points
+- personalized goal line (double progression): first-session starting weights estimated from
+  your bodyweight per movement pattern, "+1 rep" targets inside the rep range, plate-rounded
+  load jumps at the top of the range, and a 10% reset when plateaued
+- new Profile section in Settings (height / weight / age / sex) feeding the estimates;
+  logged bodyweight takes priority over the profile weight
+- e1RM shown in the "Last time" line of every loaded exercise
+
+UI:
+- week stepper and detail accordions use proper chevron arrows instead of +/− glyphs
+- Technique toggle chevron rotates open/closed
+- "liquid glass" save bar and tab bar: more translucency, stronger blur/saturation and a
+  specular top rim in both themes
+
+## v17.1 "confetti"
+Bug fixes:
+- starting the app offline no longer signs you out: auth now restores the session from local
+  storage (`getSession`) instead of requiring a network round-trip (`getUser`), so the
+  back-online auto-sync works again
+- editing a workout now survives a reload — the draft remembers which workout it edits, so a
+  save after a mid-edit refresh updates the original instead of creating a duplicate
+- "Clear" now asks for confirmation when the draft only contains energy/sleep ratings
+- while editing, the save button reads "Update workout" and the Train header shows "editing"
+
+Delight:
+- confetti burst on PRs 🎉
+- milestone celebrations: workout count (1, 10, 25, 50, 100, 250, 500, 1000) and lifetime
+  volume (10 t … 1000 t) get a toast + confetti after the save toast
+- the empty Log rotates a motivational line by day
+- a few Easter eggs are hidden in the app — one of them is whispered in the browser console
+
 ## v17 "ios"
 A full performance + UI pass: the app renders like an iOS app and stays fast with months of logs.
 
