@@ -2,6 +2,17 @@
 
 Mobile-first PWA workout tracker for the Min-Max Program.
 
+## v17.3.3 "exterminator"
+Bug-hunt release — all three found via live browser reproduction:
+- editing a workout and reloading mid-edit no longer moves it to the previously selected
+  day/week on save: editSession now persists week/day alongside the draft (data-corruption
+  class bug — an Upper/week-3 workout could silently become Full Body/week-8)
+- timed holds (Dead Hang) no longer count as kg volume: 60 s × 76 kg bodyweight used to add
+  a phantom 4 560 kg to Overall workload, the volume metric and the Grave Digger badge
+- offline navigation with a query string (e.g. /?source=pwa) now falls back to the cached
+  app shell instead of failing — service worker ignores the query for navigations
+- confetti now rains above the badge reveal card instead of behind it
+
 ## v17.3 "vault"
 Badge vault (replaces the gold champion mode):
 - 12 secret badges with hidden unlock conditions — locked slots show only "?"

@@ -1,4 +1,4 @@
-const CACHE_VERSION = '17.3.2';
+const CACHE_VERSION = '17.3.3';
 const CACHE = `minmax-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',
@@ -51,6 +51,11 @@ async function networkFirst(request){
     return response;
   }catch(e){
     if(cached) return cached;
+    // Offline navigations with a query string (/?source=pwa) must still get the app shell.
+    if(request.mode === 'navigate'){
+      const shell = await caches.match(request, {ignoreSearch: true}) || await caches.match('/index.html') || await caches.match('/');
+      if(shell) return shell;
+    }
     throw e;
   }
 }

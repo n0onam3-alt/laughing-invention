@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '17.3.2';
+const APP_VERSION = '17.3.3';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';
@@ -665,7 +665,7 @@ async function deleteSession(id, card=null){
 }
 
 
-function editSession(id){ const s=state.sessions.find(x=>x.id===id); if(!s) return; state.editId=s.id; state.week=s.week; state.day=s.day; state.exIndex=0; state.draft={date:s.date,bw:s.bw,notes:s.notes,meta:normalizeMeta(s.meta),exercises:Object.fromEntries(s.exercises.map(e=>[e.name,{sets:e.sets}])),editId:s.id}; flushDraft(); setPage('train'); renderTrain(); toast('Editing workout'); }
+function editSession(id){ const s=state.sessions.find(x=>x.id===id); if(!s) return; state.editId=s.id; state.week=s.week; state.day=s.day; state.exIndex=0; state.draft={date:s.date,bw:s.bw,notes:s.notes,meta:normalizeMeta(s.meta),exercises:Object.fromEntries(s.exercises.map(e=>[e.name,{sets:e.sets}])),editId:s.id}; flushDraft(); saveLocal(false); /* persist week/day too — a reload mid-edit must not move the workout to the previously selected day */ setPage('train'); renderTrain(); toast('Editing workout'); }
 
 function setLabel(s){ const load=Number(s.load)||0, reps=round(s.reps); const base=load>0 ? `${round(load)}×${reps}` : `${reps} ${s.timed?'sec':'reps'}`; return `${base}${s.rir!=null?` · RIR ${s.rir}`:''}`; }
 function bestSet(sets){ return [...sets].sort((a,b)=>{ const av=metricSet(a,'e1rm')||metricSet(a,'reps'); const bv=metricSet(b,'e1rm')||metricSet(b,'reps'); return bv-av; })[0] || null; }
@@ -694,7 +694,7 @@ function trendSlope(vals){
 }
 function plateRound(v){ v=Math.max(0,Number(v)||0); const step=v>=20?2.5:1.25; return Math.round(v/step)*step; }
 function bodyweightForSession(session){ return Number(session?.bw)||0; }
-function setVolume(s, name, session){ const bw=isBodyweightExercise(name)?bodyweightForSession(session):0; return ((Number(s.load)||0) + bw) * (Number(s.reps)||0); }
+function setVolume(s, name, session){ if(s?.timed) return 0; /* seconds are not reps — timed holds must not inflate kg volume */ const bw=isBodyweightExercise(name)?bodyweightForSession(session):0; return ((Number(s.load)||0) + bw) * (Number(s.reps)||0); }
 function metricSet(s, metric){ if(metric==='load') return Number(s.load)||0; if(metric==='reps') return Number(s.reps)||0; if(metric==='e1rm') return e1rm(s); return Number(s.load||0)*Number(s.reps||0); }
 function exerciseEntries(name){
   if(entryCache.has(name)) return entryCache.get(name);

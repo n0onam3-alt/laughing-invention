@@ -428,7 +428,7 @@ html.dark input::placeholder,body.dark input::placeholder{color:var(--muted);-we
 .about-row{color:var(--ink);user-select:none;-webkit-user-select:none}
 
 /* ---------- confetti (PRs, milestones, secrets) ---------- */
-#confetti{position:fixed;inset:0;pointer-events:none;z-index:130;overflow:hidden}
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:160;overflow:hidden}
 #confetti i{position:absolute;top:-14px;border-radius:2px;opacity:.95;animation:confettiFall linear both}
 @keyframes confettiFall{to{transform:translate(var(--drift,0),105vh) rotate(720deg);opacity:.85}}
 
