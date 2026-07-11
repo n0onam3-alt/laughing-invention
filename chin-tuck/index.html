@@ -169,6 +169,7 @@ nav{
   position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--card);
   border-radius:20px 20px 0 0;padding:20px 20px calc(28px + env(safe-area-inset-bottom));
   max-width:520px;margin:0 auto;transform:translateY(100%);transition:transform .25s ease;
+  max-height:82dvh;overflow-y:auto;overscroll-behavior:contain;
 }
 #sheet.active{transform:none}
 .sheet-title{font-size:1.15rem;font-weight:800;margin-bottom:16px}
@@ -183,6 +184,12 @@ nav{
 .switch::after{content:"";position:absolute;top:2.5px;left:3px;width:24px;height:24px;background:#fff;border-radius:50%;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .switch.on::after{left:21px}
 .set-note{color:var(--muted);font-size:.78rem;line-height:1.5;padding:8px 0 2px}
+.sync-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;background:var(--card2);border-radius:10px;padding:10px 12px;word-break:break-all;margin:8px 0;user-select:all}
+.sync-row{display:flex;gap:8px;margin:8px 0}
+.sync-row input{flex:1;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--text);font-size:.85rem;font-family:inherit;min-width:0}
+.sync-row input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.minibtn{background:var(--accent-soft);color:var(--accent);border:none;border-radius:10px;padding:9px 14px;font-weight:700;font-size:.85rem;cursor:pointer;font-family:inherit;white-space:nowrap}
+.minibtn.plain{background:var(--card2);color:var(--text)}
 .reset-btn{width:100%;background:none;border:none;color:var(--danger);font-weight:700;font-size:.95rem;padding:14px 0 2px;cursor:pointer;font-family:inherit}
 
 .toast{
@@ -333,6 +340,11 @@ nav{
     </div>
   </div>
   <div class="set-note">Pings remind you to reset your posture and fire while Tuck is open (keep the tab or installed app running). For guaranteed reminders when it's closed, set a repeating phone alarm.</div>
+  <div class="set-row" style="border-top:1px solid var(--line)">
+    <span class="lbl">Sync devices</span>
+    <div id="sync-ui-btns"></div>
+  </div>
+  <div id="sync-ui"></div>
   <button class="reset-btn" id="btn-reset">Reset all data</button>
 </div>
 
@@ -893,6 +905,7 @@ function finishSession(){
   const mins = Math.max(1, Math.round((Date.now() - player.startedAt) / 60000));
   log.push({ d: todayKey(), mins, ts: Date.now(), type: player.type });
   saveLog();
+  syncNow(false);
   buzz([80, 60, 80, 60, 140]); beep(660, .12); beep(880, .12, .15); beep(1100, .2, .3);
   $("#p-mid").style.display = "none";
   $("#p-done").style.display = "flex";
@@ -935,6 +948,7 @@ function renderSheet(){
     b.classList.toggle("on", +b.dataset.v === settings.ping));
   $("#sw-sound").classList.toggle("on", settings.sound);
   $("#sw-vibe").classList.toggle("on", settings.vibe);
+  renderSync();
 }
 
 $("#btn-settings").addEventListener("click", openSheet);
@@ -987,6 +1001,100 @@ setInterval(() => {
 }, 20000);
 resetPing();
 
+/* ---------------- Cloud sync (optional) ----------------
+   Capability model: a secret sync code (UUID) scopes your rows via
+   row-level security on the server. No account, no email. Anyone you
+   give the code to shares the same progress — treat it like a key. */
+
+const SYNC = {
+  url: "https://sgwsfolrbqpdnukljkpi.supabase.co/rest/v1/tuck_sessions",
+  key: "sb_publishable_epcZR8wwOHxf5PIu9jUiIQ_NWjZUDHj"
+};
+
+function syncHeaders(){
+  return {
+    "apikey": SYNC.key,
+    "Authorization": "Bearer " + SYNC.key,
+    "x-sync-key": settings.syncKey,
+    "Content-Type": "application/json"
+  };
+}
+
+let syncing = false;
+async function syncNow(interactive){
+  if (!settings.syncKey || syncing) return;
+  syncing = true;
+  try {
+    const rows = log.map(e => ({
+      sync_key: settings.syncKey, ts: e.ts, d: e.d,
+      mins: e.mins || 1, type: isMicro(e) ? "micro" : "full"
+    }));
+    if (rows.length) {
+      const r = await fetch(SYNC.url + "?on_conflict=sync_key,ts", {
+        method: "POST",
+        headers: { ...syncHeaders(), "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(rows)
+      });
+      if (!r.ok) throw new Error("push " + r.status);
+    }
+    const g = await fetch(SYNC.url + "?select=ts,d,mins,type&order=ts.asc", { headers: syncHeaders() });
+    if (!g.ok) throw new Error("pull " + g.status);
+    const remote = await g.json();
+    const have = new Set(log.map(e => e.ts));
+    let added = 0;
+    for (const r of remote) {
+      if (!have.has(r.ts)) { log.push({ d: r.d, mins: r.mins, ts: r.ts, type: r.type === "micro" ? "micro" : "full" }); added++; }
+    }
+    if (added) { log.sort((a, b) => a.ts - b.ts); saveLog(); renderToday(); renderProgress(); }
+    if (interactive) toast(added ? `Synced — pulled ${added} session${added === 1 ? "" : "s"}` : "Synced");
+  } catch (e) {
+    if (interactive) toast("Sync failed — check your connection");
+  } finally {
+    syncing = false;
+  }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function renderSync(){
+  const btns = $("#sync-ui-btns"), body = $("#sync-ui");
+  if (settings.syncKey) {
+    btns.innerHTML = `<button class="minibtn" id="sync-now">Sync now</button>`;
+    body.innerHTML = `
+      <div class="set-note">Enter this code in Settings on your other device. Keep it private — it IS the access to your progress.</div>
+      <div class="sync-code">${settings.syncKey}</div>
+      <div class="sync-row">
+        <button class="minibtn plain" id="sync-copy" style="flex:1">Copy code</button>
+        <button class="minibtn plain" id="sync-off" style="flex:1">Turn off on this device</button>
+      </div>`;
+    $("#sync-now").addEventListener("click", () => syncNow(true));
+    $("#sync-copy").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(settings.syncKey); toast("Code copied"); }
+      catch { toast("Copy failed — long-press the code instead"); }
+    });
+    $("#sync-off").addEventListener("click", () => {
+      settings.syncKey = null; saveSettings(); renderSync();
+      toast("Sync off — local data kept");
+    });
+  } else {
+    btns.innerHTML = `<button class="minibtn" id="sync-on">Turn on</button>`;
+    body.innerHTML = `
+      <div class="set-note">Backs up your progress and shares it between devices. No account — you get a secret code instead.</div>
+      <div class="sync-row">
+        <input id="sync-input" placeholder="Have a code? Paste it here" autocomplete="off" spellcheck="false">
+        <button class="minibtn" id="sync-link">Link</button>
+      </div>`;
+    $("#sync-on").addEventListener("click", () => {
+      settings.syncKey = crypto.randomUUID(); saveSettings(); renderSync(); syncNow(true);
+    });
+    $("#sync-link").addEventListener("click", () => {
+      const v = $("#sync-input").value.trim().toLowerCase();
+      if (!UUID_RE.test(v)) { toast("That doesn't look like a sync code"); return; }
+      settings.syncKey = v; saveSettings(); renderSync(); syncNow(true);
+    });
+  }
+}
+
 /* ---------------- Toast ---------------- */
 
 let toastTimer;
@@ -1003,6 +1111,7 @@ renderToday();
 renderExercises();
 renderLearn();
 renderProgress();
+syncNow(false);
 
 if ("serviceWorker" in navigator) {
   addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
