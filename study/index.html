@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<meta name="description" content="Cortex — карманный тренажёр памяти: карточки с интервальным повторением, квизы, помодоро и статистика. Всё в одном файле, работает офлайн.">
+<title>Cortex · учись умно</title>
+<style>
+:root{
+  --bg:#0b0d12; --bg2:#11141c; --card:#171b26; --card2:#1e2330;
+  --txt:#eef1f8; --mut:#8b93a7; --line:#262c3b;
+  --acc:#7c6cff; --acc2:#00d3a7; --warn:#ffb454; --bad:#ff6478;
+  --ring:rgba(124,108,255,.35);
+  --r:18px; --r-s:12px;
+  --shadow:0 10px 30px rgba(0,0,0,.35);
+}
+html.light{
+  --bg:#f2f3f8; --bg2:#ffffff; --card:#ffffff; --card2:#f5f6fb;
+  --txt:#171a22; --mut:#697084; --line:#e4e7f0;
+  --shadow:0 10px 24px rgba(23,26,34,.08);
+  --ring:rgba(124,108,255,.22);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+  background:var(--bg); color:var(--txt);
+  background-image:radial-gradient(1200px 500px at 80% -10%, rgba(124,108,255,.14), transparent 60%),
+                   radial-gradient(900px 420px at -10% 0%, rgba(0,211,167,.10), transparent 55%);
+  min-height:100dvh; padding-bottom:calc(76px + env(safe-area-inset-bottom));
+  user-select:none;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,textarea,select{font:inherit;color:var(--txt)}
+.wrap{max-width:560px;margin:0 auto;padding:18px 16px 8px}
+header.app{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.logo{font-weight:800;font-size:20px;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+.logo .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--acc),var(--acc2));box-shadow:0 0 12px var(--ring)}
+.hbtns{display:flex;gap:8px}
+.hbtn{width:38px;height:38px;border-radius:12px;background:var(--card);border:1px solid var(--line);display:grid;place-items:center;font-size:17px;transition:transform .15s}
+.hbtn:active{transform:scale(.92)}
+
+/* ---- tabs ---- */
+nav.tabs{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;
+  display:flex;justify-content:space-around;
+  padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+  background:color-mix(in srgb, var(--bg2) 82%, transparent);
+  backdrop-filter:blur(18px) saturate(1.4); -webkit-backdrop-filter:blur(18px) saturate(1.4);
+  border-top:1px solid var(--line);
+}
+nav.tabs button{
+  flex:1;max-width:120px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  font-size:11px;font-weight:600;color:var(--mut);padding:5px 0;border-radius:12px;transition:color .2s
+}
+nav.tabs button .ico{font-size:21px;line-height:1;transition:transform .2s}
+nav.tabs button.on{color:var(--acc)}
+nav.tabs button.on .ico{transform:translateY(-2px) scale(1.12)}
+.page{display:none;animation:pop .25s ease}
+.page.on{display:block}
+@keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---- cards / ui ---- */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;box-shadow:var(--shadow);margin-bottom:12px}
+.row{display:flex;align-items:center;gap:10px}
+.grow{flex:1}
+.mut{color:var(--mut)} .sm{font-size:12.5px}
+h2{font-size:17px;font-weight:800;margin-bottom:4px}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:12px 18px;border-radius:14px;font-weight:700;font-size:15px;
+  background:linear-gradient(135deg,var(--acc),#9a5cff);color:#fff;
+  box-shadow:0 6px 18px var(--ring);transition:transform .12s,filter .2s
+}
+.btn:active{transform:scale(.96)}
+.btn.ghost{background:var(--card2);color:var(--txt);box-shadow:none;border:1px solid var(--line)}
+.btn.small{padding:8px 13px;font-size:13.5px;border-radius:11px}
+.btn.green{background:linear-gradient(135deg,#00c896,#00a2c8)}
+.btn:disabled{opacity:.45;pointer-events:none}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12.5px;font-weight:600;color:var(--mut)}
+
+/* ---- home hero ---- */
+.hero{display:flex;gap:14px;align-items:center}
+.ringWrap{position:relative;width:92px;height:92px;flex:none}
+.ringWrap svg{transform:rotate(-90deg)}
+.ringWrap .val{position:absolute;inset:0;display:grid;place-items:center;font-weight:800;font-size:20px}
+.statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.stat{background:var(--card2);border:1px solid var(--line);border-radius:var(--r-s);padding:10px 8px;text-align:center}
+.stat b{display:block;font-size:19px}
+.stat span{font-size:11px;color:var(--mut);font-weight:600}
+
+/* ---- study card ---- */
+.study{perspective:1200px}
+.flash{
+  position:relative;height:280px;border-radius:22px;cursor:pointer;
+  transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.7,.3,1);
+}
+.flash.flip{transform:rotateY(180deg)}
+.face{
+  position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  padding:26px 20px;border-radius:22px;border:1px solid var(--line);
+  background:linear-gradient(160deg,var(--card),var(--card2));box-shadow:var(--shadow);
+  font-size:21px;font-weight:700;overflow-wrap:anywhere;overflow-y:auto;
+}
+.face .tag{position:absolute;top:12px;left:14px;font-size:11px;font-weight:700;color:var(--mut);letter-spacing:1.2px;text-transform:uppercase}
+.face.back{transform:rotateY(180deg);background:linear-gradient(160deg,var(--card2),var(--card))}
+.face.back .ans{color:var(--acc2)}
+.hint{ text-align:center;color:var(--mut);font-size:12.5px;margin-top:10px }
+.grades{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+.grade{padding:12px 4px;border-radius:14px;font-weight:800;font-size:14px;border:1px solid var(--line);background:var(--card);transition:transform .12s}
+.grade:active{transform:scale(.93)}
+.grade small{display:block;font-weight:600;font-size:10.5px;color:var(--mut);margin-top:2px}
+.g0{color:var(--bad)} .g1{color:var(--warn)} .g2{color:var(--acc)} .g3{color:var(--acc2)}
+.qbar{height:6px;border-radius:99px;background:var(--card2);overflow:hidden;margin-bottom:14px}
+.qbar i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:99px;transition:width .35s}
+.done{ text-align:center;padding:44px 16px }
+.done .big{font-size:52px;margin-bottom:8px}
+
+/* ---- decks ---- */
+.deck{display:flex;align-items:center;gap:13px;padding:14px;border-radius:var(--r);background:var(--card);border:1px solid var(--line);margin-bottom:10px;box-shadow:var(--shadow)}
+.deck .emo{width:46px;height:46px;border-radius:14px;background:var(--card2);display:grid;place-items:center;font-size:24px;flex:none}
+.deck b{font-size:15.5px}
+.deck .due{font-size:12px;font-weight:700;color:var(--acc)}
+.cardrow{display:flex;gap:10px;align-items:flex-start;padding:11px 2px;border-bottom:1px solid var(--line)}
+.cardrow:last-child{border-bottom:0}
+.cardrow .fr{font-weight:700}
+.cardrow .bk{color:var(--mut);font-size:13px}
+.iconbtn{color:var(--mut);font-size:16px;padding:6px}
+input.txt,textarea.txt{
+  width:100%;background:var(--card2);border:1px solid var(--line);border-radius:12px;
+  padding:11px 13px;outline:none;resize:none
+}
+input.txt:focus,textarea.txt:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--ring)}
+label.lb{display:block;font-size:12px;font-weight:700;color:var(--mut);margin:10px 0 5px;text-transform:uppercase;letter-spacing:.6px}
+
+/* ---- quiz ---- */
+.opt{display:block;width:100%;text-align:left;padding:13px 15px;border-radius:14px;border:1px solid var(--line);background:var(--card2);margin-bottom:9px;font-weight:600;transition:transform .1s}
+.opt:active{transform:scale(.98)}
+.opt.ok{border-color:var(--acc2);background:color-mix(in srgb,var(--acc2) 14%,var(--card2));}
+.opt.no{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,var(--card2));}
+
+/* ---- focus ---- */
+.focus{ text-align:center;padding:26px 16px }
+.dial{position:relative;width:230px;height:230px;margin:6px auto 14px}
+.dial svg{transform:rotate(-90deg)}
+.dial .t{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.dial .t b{font-size:46px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:1px}
+.dial .t span{color:var(--mut);font-weight:700;font-size:12px;letter-spacing:2px;text-transform:uppercase}
+.seg{display:inline-flex;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:3px;gap:2px;margin-bottom:16px}
+.seg button{padding:7px 16px;border-radius:9px;font-weight:700;font-size:13px;color:var(--mut)}
+.seg button.on{background:var(--acc);color:#fff}
+.tomatoes{margin-top:14px;font-size:19px;letter-spacing:3px;min-height:26px}
+
+/* ---- stats ---- */
+.heat{display:grid;grid-template-rows:repeat(7,1fr);grid-auto-flow:column;gap:3px;justify-content:start;overflow-x:auto;padding-bottom:4px}
+.heat i{width:11px;height:11px;border-radius:3px;background:var(--card2)}
+.heat i.l1{background:color-mix(in srgb,var(--acc) 25%,var(--card2))}
+.heat i.l2{background:color-mix(in srgb,var(--acc) 50%,var(--card2))}
+.heat i.l3{background:color-mix(in srgb,var(--acc) 75%,var(--card2))}
+.heat i.l4{background:var(--acc)}
+
+/* ---- modal / toast ---- */
+.modal{position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
+.modal.on{display:flex}
+.sheet{width:100%;max-width:560px;background:var(--bg2);border-radius:22px 22px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:up .28s cubic-bezier(.2,.8,.3,1);max-height:86dvh;overflow:auto}
+@keyframes up{from{transform:translateY(60px);opacity:0}to{transform:none;opacity:1}}
+#toast{
+  position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+  background:var(--card);border:1px solid var(--line);border-radius:999px;padding:10px 18px;
+  font-weight:700;font-size:13.5px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.3s;z-index:70;white-space:nowrap
+}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:80}
+.empty{text-align:center;padding:36px 14px;color:var(--mut)}
+.empty .e{font-size:44px;margin-bottom:8px}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:11px;font-weight:700;background:var(--card2)}
+@media (min-width:700px){ body{padding-bottom:90px} }
+</style>
+</head>
+<body>
+<canvas id="confetti"></canvas>
+<div class="wrap">
+  <header class="app">
+    <div class="logo"><span class="dot"></span>Cortex</div>
+    <div class="hbtns">
+      <button class="hbtn" id="themeBtn" title="Тема">◐</button>
+      <button class="hbtn" id="setBtn" title="Настройки">⚙</button>
+    </div>
+  </header>
+
+  <!-- ================= HOME ================= -->
+  <section class="page" id="page-home">
+    <div class="panel hero">
+      <div class="ringWrap">
+        <svg width="92" height="92" viewBox="0 0 92 92">
+          <circle cx="46" cy="46" r="40" fill="none" stroke="var(--card2)" stroke-width="9"/>
+          <circle id="goalRing" cx="46" cy="46" r="40" fill="none" stroke="url(#gr)" stroke-width="9"
+                  stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="251.3"/>
+          <defs><linearGradient id="gr" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#00d3a7"/>
+          </linearGradient></defs>
+        </svg>
+        <div class="val" id="goalPct">0%</div>
+      </div>
+      <div class="grow">
+        <h2 id="greet">Привет!</h2>
+        <div class="mut sm" id="goalLine">Цель на сегодня</div>
+        <div class="row" style="margin-top:9px;gap:7px;flex-wrap:wrap">
+          <span class="chip">🔥 <b id="streakN">0</b>&nbsp;дн. подряд</span>
+          <span class="chip">🃏 <b id="dueN">0</b>&nbsp;к повторению</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <div class="grow">
+          <h2>Повторение</h2>
+          <div class="mut sm" id="reviewHint">Интервальные повторения — секрет крепкой памяти</div>
+        </div>
+        <button class="btn" id="startStudy">Учить ▸</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <div class="grow">
+          <h2>Блиц-квиз</h2>
+          <div class="mut sm">Проверь себя: вопросы с вариантами ответов</div>
+        </div>
+        <button class="btn green" id="startQuiz">Квиз ⚡</button>
+      </div>
+    </div>
+
+    <div class="statgrid">
+      <div class="stat"><b id="stToday">0</b><span>сегодня</span></div>
+      <div class="stat"><b id="stTotal">0</b><span>всего повторений</span></div>
+      <div class="stat"><b id="stCards">0</b><span>карточек</span></div>
+    </div>
+  </section>
+
+  <!-- ================= STUDY ================= -->
+  <section class="page" id="page-study">
+    <div class="qbar"><i id="qfill"></i></div>
+    <div id="studyBody"></div>
+  </section>
+
+  <!-- ================= DECKS ================= -->
+  <section class="page" id="page-decks">
+    <div class="row" style="margin-bottom:12px">
+      <h2 class="grow">Колоды</h2>
+      <button class="btn small" id="addDeck">+ Новая</button>
+    </div>
+    <div id="deckList"></div>
+  </section>
+
+  <!-- ================= FOCUS ================= -->
+  <section class="page" id="page-focus">
+    <div class="panel focus">
+      <div class="seg" id="focusSeg">
+        <button data-m="25" class="on">Фокус 25</button>
+        <button data-m="5">Пауза 5</button>
+        <button data-m="15">Отдых 15</button>
+      </div>
+      <div class="dial">
+        <svg width="230" height="230" viewBox="0 0 230 230">
+          <circle cx="115" cy="115" r="103" fill="none" stroke="var(--card2)" stroke-width="12"/>
+          <circle id="dialRing" cx="115" cy="115" r="103" fill="none" stroke="url(#gr2)" stroke-width="12"
+                  stroke-linecap="round" stroke-dasharray="647.2" stroke-dashoffset="0"/>
+          <defs><linearGradient id="gr2" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#00d3a7"/>
+          </linearGradient></defs>
+        </svg>
+        <div class="t"><b id="dialTime">25:00</b><span id="dialLabel">фокус</span></div>
+      </div>
+      <div class="row" style="justify-content:center;gap:10px">
+        <button class="btn" id="focusGo">Старт</button>
+        <button class="btn ghost" id="focusReset">Сброс</button>
+      </div>
+      <div class="tomatoes" id="tomatoes"></div>
+      <div class="mut sm" style="margin-top:6px">Помидорки за сегодня · техника Pomodoro</div>
+    </div>
+  </section>
+
+  <!-- ================= STATS ================= -->
+  <section class="page" id="page-stats">
+    <div class="panel">
+      <h2 style="margin-bottom:10px">Активность · 12 недель</h2>
+      <div class="heat" id="heat"></div>
+    </div>
+    <div class="statgrid" style="grid-template-columns:repeat(2,1fr)">
+      <div class="stat"><b id="s2Streak">0</b><span>🔥 стрик, дней</span></div>
+      <div class="stat"><b id="s2Best">0</b><span>🏆 рекорд стрика</span></div>
+      <div class="stat"><b id="s2Ret">—</b><span>🎯 точность, 30 дн.</span></div>
+      <div class="stat"><b id="s2Pomo">0</b><span>🍅 помидорок всего</span></div>
+    </div>
+    <div class="panel">
+      <h2 style="margin-bottom:6px">Как это работает</h2>
+      <div class="mut sm">Cortex использует алгоритм интервальных повторений (SM-2): чем лучше ты помнишь карточку, тем реже она появляется. «Снова» вернёт её в сегодняшнюю очередь, «Легко» отправит далеко в будущее. 10 минут в день достаточно.</div>
+    </div>
+  </section>
+</div>
+
+<nav class="tabs">
+  <button data-p="home" class="on"><span class="ico">🏠</span>Главная</button>
+  <button data-p="study"><span class="ico">🧠</span>Учить</button>
+  <button data-p="decks"><span class="ico">🃏</span>Колоды</button>
+  <button data-p="focus"><span class="ico">🍅</span>Фокус</button>
+  <button data-p="stats"><span class="ico">📈</span>Статы</button>
+</nav>
+
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ============================================================
+   Cortex — компактный тренажёр памяти. Один файл, ноль зависимостей.
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const DAY = 864e5;
+const uid = () => Math.random().toString(36).slice(2, 10);
+const todayKey = (d = new Date()) =>
+  d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- state ---------- */
+const KEY = 'cortex_v1';
+const demoDeck = () => ({
+  id: uid(), name: 'Учимся учиться', emoji: '🎓',
+  cards: [
+    ['Что такое интервальное повторение?', 'Повторение материала через растущие промежутки времени — самый доказанный способ запоминать надолго.'],
+    ['Сколько «помидорок» в классическом Pomodoro-цикле до длинного перерыва?', '4 сессии по 25 минут.'],
+    ['Что эффективнее: перечитывать конспект или вспоминать по памяти?', 'Активное вспоминание (recall) — в 2–3 раза эффективнее перечитывания.'],
+    ['Что такое «кривая забывания» Эббингауза?', 'График того, как быстро мы забываем: без повторений через сутки теряется до 60–70% информации.'],
+    ['Зачем спать перед экзаменом, а не зубрить всю ночь?', 'Во сне мозг консолидирует память — переносит знания в долговременное хранилище.'],
+    ['Свайп/тап по карточке — что делает?', 'Переворачивает её и показывает ответ. Потом честно оцени, как хорошо ты помнил(а).'],
+  ].map(([f, b]) => newCard(f, b)),
+});
+function newCard(front, back) {
+  return { id: uid(), front, back, ef: 2.5, ivl: 0, reps: 0, lapses: 0, due: Date.now(), created: Date.now() };
+}
+function defaults() {
+  return {
+    decks: [demoDeck()],
+    log: {},            // 'YYYY-MM-DD' -> {r: reviews, ok: correct}
+    pomoLog: {},        // 'YYYY-MM-DD' -> count
+    prefs: { theme: 'auto', goal: 20, newPerDay: 10 },
+  };
+}
+let S;
+try { S = Object.assign(defaults(), JSON.parse(localStorage.getItem(KEY) || 'null') || {}); }
+catch (e) { S = defaults(); }
+let saveT;
+function save() { clearTimeout(saveT); saveT = setTimeout(() => localStorage.setItem(KEY, JSON.stringify(S)), 150); }
+
+/* ---------- theme ---------- */
+function applyTheme() {
+  const p = S.prefs.theme;
+  const dark = p === 'dark' || (p === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('light', !dark);
+  document.querySelector('meta[name=theme-color]').content = dark ? '#0b0d12' : '#f2f3f8';
+}
+$('#themeBtn').onclick = () => {
+  S.prefs.theme = S.prefs.theme === 'dark' ? 'light' : S.prefs.theme === 'light' ? 'auto' : 'dark';
+  applyTheme(); save();
+  toast({ dark: '🌙 Тёмная тема', light: '☀️ Светлая тема', auto: '◐ Как в системе' }[S.prefs.theme]);
+};
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+applyTheme();
+
+/* ---------- toast & confetti ---------- */
+let toastT;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200);
+}
+const cvs = $('#confetti'), ctx = cvs.getContext('2d');
+let parts = [], confRAF = null;
+function confetti(n = 120) {
+  cvs.width = innerWidth; cvs.height = innerHeight;
+  const colors = ['#7c6cff', '#00d3a7', '#ffb454', '#ff6478', '#4fc3f7'];
+  for (let i = 0; i < n; i++) parts.push({
+    x: Math.random() * cvs.width, y: -20 - Math.random() * cvs.height * .3,
+    vx: (Math.random() - .5) * 2.4, vy: 2 + Math.random() * 3.5,
+    s: 5 + Math.random() * 6, r: Math.random() * Math.PI, vr: (Math.random() - .5) * .25,
+    c: colors[Math.random() * colors.length | 0],
+  });
+  if (!confRAF) confTick();
+}
+function confTick() {
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  parts = parts.filter(p => p.y < cvs.height + 30);
+  for (const p of parts) {
+    p.x += p.vx; p.y += p.vy; p.r += p.vr;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+    ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * .6); ctx.restore();
+  }
+  confRAF = parts.length ? requestAnimationFrame(confTick) : (ctx.clearRect(0, 0, cvs.width, cvs.height), null);
+}
+const buzz = ms => navigator.vibrate && navigator.vibrate(ms);
+
+/* ---------- modal ---------- */
+const modal = $('#modal'), sheet = $('#sheet');
+function openSheet(html) { sheet.innerHTML = html; modal.classList.add('on'); }
+function closeSheet() { modal.classList.remove('on'); sheet.innerHTML = ''; }
+modal.addEventListener('click', e => { if (e.target === modal) closeSheet(); });
+
+/* ---------- tabs ---------- */
+function show(p) {
+  $$('.page').forEach(x => x.classList.remove('on'));
+  $('#page-' + p).classList.add('on');
+  $$('nav.tabs button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
+  if (p === 'home') renderHome();
+  if (p === 'decks') renderDecks();
+  if (p === 'stats') renderStats();
+  if (p === 'study') { if (quiz) renderQuiz(); else if (session) renderStudy(); else startStudy(); }
+}
+$$('nav.tabs button').forEach(b => b.onclick = () => show(b.dataset.p));
+
+/* ============================================================
+   SRS — SM-2 lite
+   ============================================================ */
+const allCards = () => S.decks.flatMap(d => d.cards);
+function dueCards() {
+  const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+  const t = endOfDay.getTime();
+  const due = [], fresh = [];
+  for (const c of allCards()) {
+    if (c.due > t) continue;
+    (c.reps === 0 ? fresh : due).push(c);
+  }
+  const introducedToday = (S.log[todayKey()] || {}).nw || 0;
+  const slots = Math.max(0, S.prefs.newPerDay - introducedToday);
+  return [...due, ...fresh.slice(0, slots)];
+}
+function grade(c, g) { // g: 0 again, 1 hard, 2 good, 3 easy
+  const today = todayKey();
+  const L = S.log[today] = S.log[today] || { r: 0, ok: 0, nw: 0 };
+  if (c.reps === 0) L.nw++;
+  L.r++; if (g >= 2) L.ok++;
+  if (g === 0) {
+    c.reps = 0; c.lapses++; c.ivl = 0;
+    c.ef = Math.max(1.3, c.ef - .2);
+    c.due = Date.now() + 6e4 * 10; // ещё раз через 10 минут
+  } else {
+    if (g === 1) { c.ivl = Math.max(1, Math.round(c.ivl * 1.2)) || 1; c.ef = Math.max(1.3, c.ef - .15); }
+    else {
+      c.reps++;
+      if (c.reps === 1) c.ivl = 1;
+      else if (c.reps === 2) c.ivl = 3;
+      else c.ivl = Math.round(c.ivl * c.ef);
+      if (g === 3) { c.ivl = Math.max(c.ivl + 1, Math.round(c.ivl * 1.3)); c.ef = Math.min(2.8, c.ef + .15); }
+    }
+    c.due = Date.now() + c.ivl * DAY;
+  }
+  save();
+}
+const ivlLabel = g => {
+  return ['10 мин', '1 дн+', 'интервал', 'x1.3'][g];
+};
+
+/* ============================================================
+   STUDY session
+   ============================================================ */
+let session = null; // {queue, total, flipped}
+function startStudy() {
+  const q = dueCards();
+  shuffle(q);
+  session = { queue: q, total: q.length, flipped: false };
+  renderStudy();
+}
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } }
+function renderStudy() {
+  const body = $('#studyBody');
+  if (!session || !session.queue.length) {
+    const finished = session && session.total > 0;
+    $('#qfill').style.width = '100%';
+    body.innerHTML = `<div class="panel done">
+        <div class="big">${finished ? '🎉' : '😌'}</div>
+        <h2>${finished ? 'Готово! Все карточки повторены' : 'На сегодня всё чисто'}</h2>
+        <div class="mut sm" style="margin:8px 0 18px">${finished ? 'Мозг говорит спасибо. Возвращайся завтра — интервалы уже посчитаны.' : 'Добавь новые карточки или устрой блиц-квиз.'}</div>
+        <div class="row" style="justify-content:center;gap:9px">
+          <button class="btn ghost" onclick="show('decks')">🃏 К колодам</button>
+          <button class="btn green" onclick="startQuizFlow()">⚡ Квиз</button>
+        </div>
+      </div>`;
+    if (finished) { confetti(); buzz([30, 40, 60]); session = null; renderHome(); }
+    return;
+  }
+  const c = session.queue[0];
+  const doneN = session.total - session.queue.length;
+  $('#qfill').style.width = (doneN / session.total * 100) + '%';
+  const deck = S.decks.find(d => d.cards.includes(c));
+  body.innerHTML = `
+    <div class="mut sm" style="margin-bottom:9px">${esc(deck ? deck.emoji + ' ' + deck.name : '')} · ${doneN + 1} / ${session.total}</div>
+    <div class="study"><div class="flash${session.flipped ? ' flip' : ''}" id="flash">
+      <div class="face"><span class="tag">Вопрос</span><div>${esc(c.front)}</div></div>
+      <div class="face back"><span class="tag">Ответ</span><div class="ans">${esc(c.back)}</div></div>
+    </div></div>
+    ${session.flipped ? `
+    <div class="grades">
+      <button class="grade g0" data-g="0">Снова<small>10 мин</small></button>
+      <button class="grade g1" data-g="1">Трудно<small>${fmtIvl(previewIvl(c,1))}</small></button>
+      <button class="grade g2" data-g="2">Хорошо<small>${fmtIvl(previewIvl(c,2))}</small></button>
+      <button class="grade g3" data-g="3">Легко<small>${fmtIvl(previewIvl(c,3))}</small></button>
+    </div>
+    <div class="hint">клавиши <span class="kbd">1</span>–<span class="kbd">4</span></div>` : `
+    <div class="hint" style="margin-top:14px">тапни карточку или жми <span class="kbd">пробел</span>, чтобы увидеть ответ</div>`}
+  `;
+  $('#flash').onclick = flipCard;
+  $$('.grade').forEach(b => b.onclick = () => answer(+b.dataset.g));
+}
+function previewIvl(c, g) {
+  const t = { ...c };
+  if (g === 1) return Math.max(1, Math.round(t.ivl * 1.2)) || 1;
+  const reps = t.reps + 1;
+  let ivl = reps === 1 ? 1 : reps === 2 ? 3 : Math.round(t.ivl * t.ef);
+  if (g === 3) ivl = Math.max(ivl + 1, Math.round(ivl * 1.3));
+  return ivl;
+}
+const fmtIvl = d => d >= 30 ? Math.round(d / 30) + ' мес' : d >= 7 ? Math.round(d / 7) + ' нед' : d + ' дн';
+function flipCard() {
+  if (!session || !session.queue.length) return;
+  session.flipped = !session.flipped;
+  const f = $('#flash'); f.classList.toggle('flip', session.flipped);
+  if (session.flipped) setTimeout(renderStudy, 260); else renderStudy();
+}
+function answer(g) {
+  if (!session || !session.flipped) return;
+  const c = session.queue.shift();
+  grade(c, g);
+  if (g === 0) session.queue.push(c); // вернётся в конец очереди
+  session.flipped = false;
+  buzz(12);
+  renderStudy();
+}
+document.addEventListener('keydown', e => {
+  if (modal.classList.contains('on') || e.target.matches('input,textarea')) return;
+  if (!$('#page-study').classList.contains('on')) return;
+  if (e.code === 'Space') { e.preventDefault(); if (session && !session.flipped) flipCard(); }
+  if (['1', '2', '3', '4'].includes(e.key)) answer(+e.key - 1);
+});
+$('#startStudy').onclick = () => show('study');
+
+/* ============================================================
+   QUIZ
+   ============================================================ */
+let quiz = null;
+function startQuizFlow() {
+  closeSheet();
+  const pool = allCards().filter(c => c.back.length);
+  if (pool.length < 4) return toast('Нужно минимум 4 карточки для квиза');
+  shuffle(pool);
+  const qs = pool.slice(0, Math.min(10, pool.length)).map(c => {
+    const wrong = shuffleCopy(pool.filter(x => x !== c && x.back !== c.back)).slice(0, 3).map(x => x.back);
+    const opts = shuffleCopy([c.back, ...wrong]);
+    return { q: c.front, a: c.back, opts };
+  });
+  quiz = { qs, i: 0, ok: 0, locked: false };
+  show('study'); // reuse the study page shell
+  renderQuiz();
+}
+const shuffleCopy = a => { const b = [...a]; shuffle(b); return b; };
+function renderQuiz() {
+  const body = $('#studyBody');
+  if (quiz.i >= quiz.qs.length) {
+    const pct = Math.round(quiz.ok / quiz.qs.length * 100);
+    $('#qfill').style.width = '100%';
+    body.innerHTML = `<div class="panel done">
+      <div class="big">${pct >= 80 ? '🏆' : pct >= 50 ? '💪' : '📚'}</div>
+      <h2>${quiz.ok} из ${quiz.qs.length} · ${pct}%</h2>
+      <div class="mut sm" style="margin:8px 0 18px">${pct >= 80 ? 'Блестяще! Так держать.' : pct >= 50 ? 'Неплохо! Слабые места подтянут повторения.' : 'Отличный повод пройтись по карточкам ещё раз.'}</div>
+      <div class="row" style="justify-content:center;gap:9px">
+        <button class="btn ghost" onclick="startQuizFlow()">Ещё раз ⚡</button>
+        <button class="btn" onclick="quiz=null;show('home')">На главную</button>
+      </div></div>`;
+    if (pct >= 80) { confetti(160); buzz([40, 40, 80]); }
+    quiz = null;
+    return;
+  }
+  const q = quiz.qs[quiz.i];
+  $('#qfill').style.width = (quiz.i / quiz.qs.length * 100) + '%';
+  body.innerHTML = `
+    <div class="mut sm" style="margin-bottom:9px">⚡ Квиз · ${quiz.i + 1} / ${quiz.qs.length} · верно: ${quiz.ok}</div>
+    <div class="panel" style="font-size:18px;font-weight:700;min-height:90px;display:flex;align-items:center">${esc(q.q)}</div>
+    <div id="opts">${q.opts.map((o, i) => `<button class="opt" data-i="${i}">${esc(o)}</button>`).join('')}</div>`;
+  $$('#opts .opt').forEach(b => b.onclick = () => {
+    if (quiz.locked) return; quiz.locked = true;
+    const pick = q.opts[+b.dataset.i], right = pick === q.a;
+    if (right) { quiz.ok++; b.classList.add('ok'); buzz(15); }
+    else {
+      b.classList.add('no');
+      $$('#opts .opt').forEach(x => { if (q.opts[+x.dataset.i] === q.a) x.classList.add('ok'); });
+      buzz([10, 30, 10]);
+    }
+    setTimeout(() => { quiz.i++; quiz.locked = false; renderQuiz(); }, right ? 550 : 1300);
+  });
+}
+$('#startQuiz').onclick = startQuizFlow;
+
+/* ============================================================
+   DECKS
+   ============================================================ */
+function renderDecks() {
+  const list = $('#deckList');
+  if (!S.decks.length) {
+    list.innerHTML = `<div class="empty"><div class="e">🃏</div>Пока пусто.<br>Создай первую колоду!</div>`;
+    return;
+  }
+  const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+  list.innerHTML = S.decks.map(d => {
+    const due = d.cards.filter(c => c.due <= endOfDay.getTime()).length;
+    return `<div class="deck" data-id="${d.id}">
+      <div class="emo">${esc(d.emoji)}</div>
+      <div class="grow"><b>${esc(d.name)}</b>
+        <div class="sm mut">${d.cards.length} карт.${due ? ` · <span class="due">${due} к повторению</span>` : ''}</div>
+      </div>
+      <span class="mut">›</span>
+    </div>`;
+  }).join('');
+  $$('.deck').forEach(el => el.onclick = () => openDeck(el.dataset.id));
+}
+$('#addDeck').onclick = () => deckForm();
+function deckForm(deck) {
+  openSheet(`
+    <h2 style="margin-bottom:6px">${deck ? 'Редактировать колоду' : 'Новая колода'}</h2>
+    <label class="lb">Название</label>
+    <input class="txt" id="dName" maxlength="40" value="${deck ? esc(deck.name) : ''}" placeholder="Например: Английские слова">
+    <label class="lb">Эмодзи</label>
+    <input class="txt" id="dEmo" maxlength="4" value="${deck ? esc(deck.emoji) : '📘'}" style="width:90px;text-align:center;font-size:20px">
+    <div class="row" style="margin-top:18px;gap:9px">
+      <button class="btn grow" id="dSave">Сохранить</button>
+      ${deck ? '<button class="btn ghost" id="dDel">🗑</button>' : ''}
+      <button class="btn ghost" onclick="closeSheet()">Отмена</button>
+    </div>`);
+  $('#dName').focus();
+  $('#dSave').onclick = () => {
+    const name = $('#dName').value.trim();
+    if (!name) return toast('Введи название');
+    const emoji = $('#dEmo').value.trim() || '📘';
+    if (deck) { deck.name = name; deck.emoji = emoji; }
+    else S.decks.push({ id: uid(), name, emoji, cards: [] });
+    save(); closeSheet(); renderDecks(); toast(deck ? 'Сохранено' : '✨ Колода создана');
+    if (!deck) openDeck(S.decks[S.decks.length - 1].id);
+  };
+  if (deck) $('#dDel').onclick = () => {
+    if (!confirm(`Удалить колоду «${deck.name}» и все её карточки?`)) return;
+    S.decks = S.decks.filter(x => x !== deck);
+    save(); closeSheet(); renderDecks(); toast('Колода удалена');
+  };
+}
+function openDeck(id) {
+  const d = S.decks.find(x => x.id === id);
+  if (!d) return;
+  openSheet(`
+    <div class="row" style="margin-bottom:10px">
+      <div style="font-size:26px">${esc(d.emoji)}</div>
+      <h2 class="grow">${esc(d.name)}</h2>
+      <button class="btn small ghost" id="dEdit">✎</button>
+    </div>
+    <div class="row" style="gap:8px;margin-bottom:12px">
+      <button class="btn small grow" id="cAdd">+ Карточка</button>
+      <button class="btn small ghost" id="dExport">Экспорт</button>
+    </div>
+    <div id="cardList">${d.cards.length ? d.cards.map(c => `
+      <div class="cardrow" data-id="${c.id}">
+        <div class="grow"><div class="fr">${esc(c.front)}</div><div class="bk">${esc(c.back)}</div>
+          <div class="sm mut">${c.reps ? `интервал ${fmtIvl(c.ivl || 1)}` : 'новая'}</div></div>
+        <button class="iconbtn cEdit">✎</button><button class="iconbtn cDel">🗑</button>
+      </div>`).join('') : '<div class="empty"><div class="e">✍️</div>Добавь первую карточку</div>'}
+    </div>`);
+  $('#dEdit').onclick = () => deckForm(d);
+  $('#cAdd').onclick = () => cardForm(d);
+  $('#dExport').onclick = () => {
+    const blob = new Blob([JSON.stringify({ name: d.name, emoji: d.emoji, cards: d.cards.map(c => ({ front: c.front, back: c.back })) }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = d.name.replace(/\s+/g, '_') + '.json'; a.click();
+    URL.revokeObjectURL(a.href); toast('Экспортировано 📤');
+  };
+  $$('#cardList .cardrow').forEach(row => {
+    const c = d.cards.find(x => x.id === row.dataset.id);
+    row.querySelector('.cEdit').onclick = () => cardForm(d, c);
+    row.querySelector('.cDel').onclick = () => {
+      if (!confirm('Удалить карточку?')) return;
+      d.cards = d.cards.filter(x => x !== c); save(); openDeck(d.id); toast('Удалено');
+    };
+  });
+}
+function cardForm(deck, card) {
+  openSheet(`
+    <h2 style="margin-bottom:6px">${card ? 'Редактировать' : 'Новая карточка'} · ${esc(deck.emoji)} ${esc(deck.name)}</h2>
+    <label class="lb">Вопрос (лицо)</label>
+    <textarea class="txt" id="cF" rows="2" placeholder="Что спрашиваем?">${card ? esc(card.front) : ''}</textarea>
+    <label class="lb">Ответ (оборот)</label>
+    <textarea class="txt" id="cB" rows="3" placeholder="Правильный ответ">${card ? esc(card.back) : ''}</textarea>
+    <div class="row" style="margin-top:18px;gap:9px">
+      <button class="btn grow" id="cSave">${card ? 'Сохранить' : 'Добавить'}</button>
+      ${card ? '' : '<button class="btn ghost" id="cSaveMore">+ ещё</button>'}
+      <button class="btn ghost" onclick="openDeck('${deck.id}')">Назад</button>
+    </div>`);
+  $('#cF').focus();
+  const commit = () => {
+    const f = $('#cF').value.trim(), b = $('#cB').value.trim();
+    if (!f || !b) { toast('Заполни обе стороны'); return false; }
+    if (card) { card.front = f; card.back = b; }
+    else deck.cards.push(newCard(f, b));
+    save(); return true;
+  };
+  $('#cSave').onclick = () => { if (commit()) { openDeck(deck.id); toast(card ? 'Сохранено' : '✨ Добавлено'); } };
+  const more = $('#cSaveMore');
+  if (more) more.onclick = () => { if (commit()) { $('#cF').value = ''; $('#cB').value = ''; $('#cF').focus(); toast('✨ Добавлено, давай ещё'); } };
+}
+
+/* ============================================================
+   FOCUS (Pomodoro)
+   ============================================================ */
+const F = { total: 25 * 60, left: 25 * 60, run: false, mode: 25, t0: 0, endAt: 0, raf: null };
+const dialRing = $('#dialRing'), CIRC = 647.2;
+function fmtT(s) { s = Math.max(0, Math.ceil(s)); return String(s / 60 | 0).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
+function drawDial() {
+  $('#dialTime').textContent = fmtT(F.left);
+  dialRing.style.strokeDashoffset = CIRC * (1 - F.left / F.total);
+  document.title = F.run ? `${fmtT(F.left)} · Cortex` : 'Cortex · учись умно';
+}
+function focusTick() {
+  if (!F.run) return;
+  F.left = (F.endAt - Date.now()) / 1000;
+  if (F.left <= 0) { F.left = 0; finishFocus(); return; }
+  drawDial();
+  F.raf = setTimeout(focusTick, 250);
+}
+function finishFocus() {
+  F.run = false; clearTimeout(F.raf); drawDial();
+  $('#focusGo').textContent = 'Старт';
+  beep();
+  buzz([80, 60, 80, 60, 160]);
+  if (F.mode === 25) {
+    const k = todayKey(); S.pomoLog[k] = (S.pomoLog[k] || 0) + 1; save();
+    confetti(90); toast('🍅 Помидорка готова! Сделай паузу.');
+    renderTomatoes();
+  } else toast('Перерыв окончен — вперёд! 💪');
+  resetFocus(F.mode);
+}
+function resetFocus(min) {
+  F.mode = min; F.total = F.left = min * 60; F.run = false;
+  clearTimeout(F.raf); $('#focusGo').textContent = 'Старт';
+  $('#dialLabel').textContent = min === 25 ? 'фокус' : min === 5 ? 'пауза' : 'отдых';
+  drawDial();
+}
+$('#focusGo').onclick = () => {
+  F.run = !F.run;
+  $('#focusGo').textContent = F.run ? 'Пауза' : 'Старт';
+  if (F.run) { F.endAt = Date.now() + F.left * 1000; focusTick(); }
+  else clearTimeout(F.raf);
+};
+$('#focusReset').onclick = () => resetFocus(F.mode);
+$$('#focusSeg button').forEach(b => b.onclick = () => {
+  $$('#focusSeg button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); resetFocus(+b.dataset.m);
+});
+function renderTomatoes() {
+  const n = S.pomoLog[todayKey()] || 0;
+  $('#tomatoes').textContent = n ? '🍅'.repeat(Math.min(n, 12)) + (n > 12 ? ` +${n - 12}` : '') : '—';
+}
+function beep() {
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    [0, .18, .36].forEach((d, i) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.frequency.value = [660, 660, 880][i]; o.type = 'sine';
+      g.gain.setValueAtTime(.001, ac.currentTime + d);
+      g.gain.exponentialRampToValueAtTime(.22, ac.currentTime + d + .02);
+      g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + d + .16);
+      o.start(ac.currentTime + d); o.stop(ac.currentTime + d + .2);
+    });
+  } catch (e) {}
+}
+
+/* ============================================================
+   STATS / HOME
+   ============================================================ */
+function streakInfo() {
+  let cur = 0, best = 0, run = 0;
+  const d = new Date(); d.setDate(d.getDate() - 365);
+  for (let i = 0; i <= 365; i++) {
+    const k = todayKey(d);
+    const active = (S.log[k] && S.log[k].r > 0) || (S.pomoLog[k] > 0);
+    run = active ? run + 1 : 0;
+    best = Math.max(best, run);
+    d.setDate(d.getDate() + 1);
+  }
+  // current streak: count back from today (today optional)
+  const t = new Date();
+  const activeOn = dt => { const k = todayKey(dt); return (S.log[k] && S.log[k].r > 0) || (S.pomoLog[k] > 0); };
+  if (activeOn(t)) { cur = 1; }
+  const back = new Date(t); back.setDate(back.getDate() - 1);
+  while (activeOn(back)) { cur++; back.setDate(back.getDate() - 1); }
+  return { cur, best };
+}
+function renderHome() {
+  const today = S.log[todayKey()] || { r: 0, ok: 0 };
+  const goal = S.prefs.goal;
+  const pct = Math.min(100, Math.round(today.r / goal * 100));
+  $('#goalPct').textContent = pct + '%';
+  $('#goalRing').style.strokeDashoffset = 251.3 * (1 - pct / 100);
+  $('#goalLine').textContent = `Цель: ${today.r} / ${goal} повторений`;
+  const h = new Date().getHours();
+  $('#greet').textContent = h < 5 ? 'Сова! 🦉' : h < 12 ? 'Доброе утро ☀️' : h < 18 ? 'Добрый день 👋' : 'Добрый вечер 🌙';
+  const due = dueCards().length;
+  $('#dueN').textContent = due;
+  $('#streakN').textContent = streakInfo().cur;
+  $('#reviewHint').textContent = due ? `В очереди ${due} карточ${due % 10 === 1 && due % 100 !== 11 ? 'ка' : due % 10 >= 2 && due % 10 <= 4 && (due % 100 < 12 || due % 100 > 14) ? 'ки' : 'ек'}` : 'Очередь пуста — красота!';
+  $('#stToday').textContent = today.r;
+  $('#stTotal').textContent = Object.values(S.log).reduce((a, x) => a + (x.r || 0), 0);
+  $('#stCards').textContent = allCards().length;
+}
+function renderStats() {
+  const heat = $('#heat');
+  const cells = [];
+  const end = new Date(); end.setHours(23, 59, 59, 999);
+  const d = new Date();
+  d.setDate(d.getDate() - 83);      // последние 12 недель, включая сегодня
+  d.setDate(d.getDate() - d.getDay()); // назад до воскресенья — колонки = недели
+  for (; d <= end; d.setDate(d.getDate() + 1)) {
+    const k = todayKey(d);
+    const n = ((S.log[k] || {}).r || 0) + (S.pomoLog[k] || 0) * 3;
+    const lvl = n === 0 ? 0 : n < 5 ? 1 : n < 12 ? 2 : n < 25 ? 3 : 4;
+    cells.push(`<i class="${lvl ? 'l' + lvl : ''}" title="${k}: ${n}"></i>`);
+  }
+  heat.innerHTML = cells.join('');
+  const si = streakInfo();
+  $('#s2Streak').textContent = si.cur;
+  $('#s2Best').textContent = si.best;
+  const cutoff = Date.now() - 30 * DAY;
+  let r = 0, ok = 0;
+  for (const [k, v] of Object.entries(S.log)) {
+    if (new Date(k).getTime() >= cutoff) { r += v.r || 0; ok += v.ok || 0; }
+  }
+  $('#s2Ret').textContent = r ? Math.round(ok / r * 100) + '%' : '—';
+  $('#s2Pomo').textContent = Object.values(S.pomoLog).reduce((a, b) => a + b, 0);
+}
+
+/* ============================================================
+   SETTINGS
+   ============================================================ */
+$('#setBtn').onclick = () => {
+  openSheet(`
+    <h2 style="margin-bottom:12px">Настройки</h2>
+    <label class="lb">Цель повторений в день</label>
+    <input class="txt" id="sGoal" type="number" min="5" max="500" value="${S.prefs.goal}">
+    <label class="lb">Новых карточек в день</label>
+    <input class="txt" id="sNew" type="number" min="0" max="100" value="${S.prefs.newPerDay}">
+    <div class="row" style="margin-top:16px;gap:9px;flex-wrap:wrap">
+      <button class="btn small ghost" id="sExport">📤 Экспорт всего</button>
+      <button class="btn small ghost" id="sImport">📥 Импорт</button>
+      <input type="file" id="sFile" accept=".json" hidden>
+    </div>
+    <div class="row" style="margin-top:16px;gap:9px">
+      <button class="btn grow" id="sSave">Сохранить</button>
+      <button class="btn ghost" onclick="closeSheet()">Закрыть</button>
+    </div>
+    <div class="mut sm" style="margin-top:14px">Cortex хранит всё локально в браузере — без аккаунтов и серверов. Экспортируй JSON для бэкапа.</div>`);
+  $('#sSave').onclick = () => {
+    S.prefs.goal = Math.min(500, Math.max(5, +$('#sGoal').value || 20));
+    S.prefs.newPerDay = Math.min(100, Math.max(0, +$('#sNew').value || 10));
+    save(); closeSheet(); renderHome(); toast('Сохранено ✓');
+  };
+  $('#sExport').onclick = () => {
+    const blob = new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'cortex_backup.json'; a.click();
+    URL.revokeObjectURL(a.href); toast('Бэкап скачан 📤');
+  };
+  $('#sImport').onclick = () => $('#sFile').click();
+  $('#sFile').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    f.text().then(txt => {
+      const data = JSON.parse(txt);
+      if (data.decks) { // full backup
+        S = Object.assign(defaults(), data); toast('Бэкап восстановлен ✓');
+      } else if (data.cards) { // single deck
+        S.decks.push({ id: uid(), name: data.name || 'Импорт', emoji: data.emoji || '📦', cards: data.cards.map(c => newCard(c.front, c.back)) });
+        toast('Колода импортирована ✓');
+      } else throw 0;
+      save(); closeSheet(); renderHome(); renderDecks();
+    }).catch(() => toast('Не получилось прочитать файл 😕'));
+  };
+};
+
+/* ---------- boot ---------- */
+renderHome(); renderTomatoes(); drawDial();
+show('home');
+console.log('%c🧠 Cortex — учись умно, а не долго', 'font-size:14px;color:#7c6cff;font-weight:bold');
+</script>
+</body>
+</html>
