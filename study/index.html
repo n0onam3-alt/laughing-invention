@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d12">
-<meta name="description" content="Cortex — карманный тренажёр памяти: карточки с интервальным повторением, квизы, помодоро и статистика. Всё в одном файле, работает офлайн.">
+<meta name="description" content="Cortex — тренажёр памяти с мозгом-питомцем: интервальные повторения, cloze-карточки, прогноз забывания, квесты и XP, помодоро со звуками природы. Один файл, работает офлайн.">
 <title>Cortex · учись умно</title>
 <style>
 :root{
@@ -79,12 +79,36 @@ h2{font-size:17px;font-weight:800;margin-bottom:4px}
 .btn.green{background:linear-gradient(135deg,#00c896,#00a2c8)}
 .btn:disabled{opacity:.45;pointer-events:none}
 .chip{display:inline-flex;align-items:center;gap:5px;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12.5px;font-weight:600;color:var(--mut)}
+.chip b{color:var(--txt)}
 
-/* ---- home hero ---- */
-.hero{display:flex;gap:14px;align-items:center}
-.ringWrap{position:relative;width:92px;height:92px;flex:none}
-.ringWrap svg{transform:rotate(-90deg)}
-.ringWrap .val{position:absolute;inset:0;display:grid;place-items:center;font-weight:800;font-size:20px}
+/* ---- pet hero ---- */
+.hero{display:flex;gap:12px;align-items:center;overflow:hidden;position:relative}
+.pet{width:118px;flex:none;position:relative}
+.pet svg{width:100%;display:block;animation:float 4s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.pet .lidL,.pet .lidR{transform-origin:center;animation:blink 5s infinite}
+@keyframes blink{0%,94%,100%{transform:scaleY(0)}96%,98%{transform:scaleY(1)}}
+.bubble{
+  background:var(--card2);border:1px solid var(--line);border-radius:13px;
+  padding:8px 11px;font-size:12.5px;color:var(--mut);margin-top:8px;position:relative
+}
+.bubble:before{content:'';position:absolute;top:-6px;left:26px;width:10px;height:10px;background:var(--card2);border-left:1px solid var(--line);border-top:1px solid var(--line);transform:rotate(45deg)}
+.lvlbar{height:7px;border-radius:99px;background:var(--card2);overflow:hidden;margin-top:6px}
+.lvlbar i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:99px;transition:width .5s}
+.title-chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:var(--acc);letter-spacing:.4px;text-transform:uppercase}
+
+/* ---- quests ---- */
+.quest{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--line)}
+.quest:last-child{border-bottom:0}
+.quest .qi{width:34px;height:34px;border-radius:11px;background:var(--card2);display:grid;place-items:center;font-size:17px;flex:none}
+.quest.done .qi{background:color-mix(in srgb,var(--acc2) 20%,var(--card2))}
+.quest.done .qt{text-decoration:line-through;color:var(--mut)}
+.quest .qt{font-weight:700;font-size:13.5px}
+.quest .qp{font-size:11.5px;color:var(--mut)}
+.quest .xp{font-size:11.5px;font-weight:800;color:var(--warn);flex:none}
+.qminibar{height:4px;border-radius:99px;background:var(--card2);overflow:hidden;margin-top:4px;width:100%}
+.qminibar i{display:block;height:100%;background:var(--acc2);border-radius:99px}
+
 .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
 .stat{background:var(--card2);border:1px solid var(--line);border-radius:var(--r-s);padding:10px 8px;text-align:center}
 .stat b{display:block;font-size:19px}
@@ -93,7 +117,7 @@ h2{font-size:17px;font-weight:800;margin-bottom:4px}
 /* ---- study card ---- */
 .study{perspective:1200px}
 .flash{
-  position:relative;height:280px;border-radius:22px;cursor:pointer;
+  position:relative;height:290px;border-radius:22px;cursor:pointer;
   transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.7,.3,1);
 }
 .flash.flip{transform:rotateY(180deg)}
@@ -102,27 +126,35 @@ h2{font-size:17px;font-weight:800;margin-bottom:4px}
   display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
   padding:26px 20px;border-radius:22px;border:1px solid var(--line);
   background:linear-gradient(160deg,var(--card),var(--card2));box-shadow:var(--shadow);
-  font-size:21px;font-weight:700;overflow-wrap:anywhere;overflow-y:auto;
+  font-size:20px;font-weight:700;overflow-wrap:anywhere;overflow-y:auto;
 }
 .face .tag{position:absolute;top:12px;left:14px;font-size:11px;font-weight:700;color:var(--mut);letter-spacing:1.2px;text-transform:uppercase}
 .face.back{transform:rotateY(180deg);background:linear-gradient(160deg,var(--card2),var(--card))}
 .face.back .ans{color:var(--acc2)}
+.gap{display:inline-block;min-width:64px;border-bottom:2.5px dashed var(--acc);color:transparent;border-radius:3px;margin:0 2px}
+.gapAns{color:var(--acc2);border-bottom:2.5px solid var(--acc2);border-radius:3px;margin:0 2px}
 .hint{ text-align:center;color:var(--mut);font-size:12.5px;margin-top:10px }
 .grades{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
 .grade{padding:12px 4px;border-radius:14px;font-weight:800;font-size:14px;border:1px solid var(--line);background:var(--card);transition:transform .12s}
 .grade:active{transform:scale(.93)}
 .grade small{display:block;font-weight:600;font-size:10.5px;color:var(--mut);margin-top:2px}
+.grade.sug{box-shadow:0 0 0 2px var(--ring);border-color:var(--acc)}
 .g0{color:var(--bad)} .g1{color:var(--warn)} .g2{color:var(--acc)} .g3{color:var(--acc2)}
 .qbar{height:6px;border-radius:99px;background:var(--card2);overflow:hidden;margin-bottom:14px}
 .qbar i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:99px;transition:width .35s}
 .done{ text-align:center;padding:44px 16px }
 .done .big{font-size:52px;margin-bottom:8px}
+.typebox{margin-top:12px}
+.typediff{margin-top:10px;font-size:14px;font-weight:600;padding:10px 12px;border-radius:12px;background:var(--card2);border:1px solid var(--line);text-align:left}
+.tOk{color:var(--acc2)} .tNo{color:var(--bad);text-decoration:line-through}
 
 /* ---- decks ---- */
-.deck{display:flex;align-items:center;gap:13px;padding:14px;border-radius:var(--r);background:var(--card);border:1px solid var(--line);margin-bottom:10px;box-shadow:var(--shadow)}
+.deck{display:flex;align-items:center;gap:13px;padding:14px;border-radius:var(--r);background:var(--card);border:1px solid var(--line);margin-bottom:10px;box-shadow:var(--shadow);cursor:pointer}
 .deck .emo{width:46px;height:46px;border-radius:14px;background:var(--card2);display:grid;place-items:center;font-size:24px;flex:none}
 .deck b{font-size:15.5px}
 .deck .due{font-size:12px;font-weight:700;color:var(--acc)}
+.membar{height:5px;border-radius:99px;background:var(--card2);overflow:hidden;margin-top:6px}
+.membar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--bad),var(--warn) 45%,var(--acc2) 80%)}
 .cardrow{display:flex;gap:10px;align-items:flex-start;padding:11px 2px;border-bottom:1px solid var(--line)}
 .cardrow:last-child{border-bottom:0}
 .cardrow .fr{font-weight:700}
@@ -152,6 +184,10 @@ label.lb{display:block;font-size:12px;font-weight:700;color:var(--mut);margin:10
 .seg button{padding:7px 16px;border-radius:9px;font-weight:700;font-size:13px;color:var(--mut)}
 .seg button.on{background:var(--acc);color:#fff}
 .tomatoes{margin-top:14px;font-size:19px;letter-spacing:3px;min-height:26px}
+.sndrow{display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap;align-items:center}
+.sndbtn{padding:9px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card2);font-weight:700;font-size:13px;color:var(--mut)}
+.sndbtn.on{color:#fff;background:linear-gradient(135deg,var(--acc),#9a5cff);border-color:transparent}
+input[type=range]{accent-color:var(--acc);width:110px}
 
 /* ---- stats ---- */
 .heat{display:grid;grid-template-rows:repeat(7,1fr);grid-auto-flow:column;gap:3px;justify-content:start;overflow-x:auto;padding-bottom:4px}
@@ -193,25 +229,26 @@ label.lb{display:block;font-size:12px;font-weight:700;color:var(--mut);margin:10
   <!-- ================= HOME ================= -->
   <section class="page" id="page-home">
     <div class="panel hero">
-      <div class="ringWrap">
-        <svg width="92" height="92" viewBox="0 0 92 92">
-          <circle cx="46" cy="46" r="40" fill="none" stroke="var(--card2)" stroke-width="9"/>
-          <circle id="goalRing" cx="46" cy="46" r="40" fill="none" stroke="url(#gr)" stroke-width="9"
-                  stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="251.3"/>
-          <defs><linearGradient id="gr" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#00d3a7"/>
-          </linearGradient></defs>
-        </svg>
-        <div class="val" id="goalPct">0%</div>
-      </div>
+      <div class="pet" id="petBox"></div>
       <div class="grow">
-        <h2 id="greet">Привет!</h2>
-        <div class="mut sm" id="goalLine">Цель на сегодня</div>
-        <div class="row" style="margin-top:9px;gap:7px;flex-wrap:wrap">
-          <span class="chip">🔥 <b id="streakN">0</b>&nbsp;дн. подряд</span>
-          <span class="chip">🃏 <b id="dueN">0</b>&nbsp;к повторению</span>
+        <span class="title-chip" id="lvlTitle">Неофит · ур. 0</span>
+        <div class="lvlbar"><i id="xpFill"></i></div>
+        <div class="mut sm" id="xpLine" style="margin-top:3px">0 XP</div>
+        <div class="row" style="margin-top:8px;gap:7px;flex-wrap:wrap">
+          <span class="chip">🔥 <b id="streakN">0</b></span>
+          <span class="chip">🃏 <b id="dueN">0</b></span>
+          <span class="chip">🧠 <b id="memN">—</b></span>
         </div>
       </div>
+    </div>
+    <div class="bubble" id="petSay" style="margin:-4px 0 12px"></div>
+
+    <div class="panel" id="questPanel">
+      <div class="row" style="margin-bottom:6px">
+        <h2 class="grow">Квесты дня</h2>
+        <span class="chip">🎯 цель: <b id="goalMini">0/20</b></span>
+      </div>
+      <div id="questList"></div>
     </div>
 
     <div class="panel">
@@ -279,8 +316,14 @@ label.lb{display:block;font-size:12px;font-weight:700;color:var(--mut);margin:10
         <button class="btn" id="focusGo">Старт</button>
         <button class="btn ghost" id="focusReset">Сброс</button>
       </div>
+      <div class="sndrow">
+        <button class="sndbtn" data-s="rain">🌧 Дождь</button>
+        <button class="sndbtn" data-s="ocean">🌊 Океан</button>
+        <button class="sndbtn" data-s="fire">🔥 Костёр</button>
+        <input type="range" id="sndVol" min="0" max="100" value="45" title="Громкость">
+      </div>
       <div class="tomatoes" id="tomatoes"></div>
-      <div class="mut sm" style="margin-top:6px">Помидорки за сегодня · техника Pomodoro</div>
+      <div class="mut sm" style="margin-top:6px">Помидорки за сегодня · звуки синтезируются на лету, без интернета</div>
     </div>
   </section>
 
@@ -295,10 +338,12 @@ label.lb{display:block;font-size:12px;font-weight:700;color:var(--mut);margin:10
       <div class="stat"><b id="s2Best">0</b><span>🏆 рекорд стрика</span></div>
       <div class="stat"><b id="s2Ret">—</b><span>🎯 точность, 30 дн.</span></div>
       <div class="stat"><b id="s2Pomo">0</b><span>🍅 помидорок всего</span></div>
+      <div class="stat"><b id="s2Xp">0</b><span>⚡ всего XP</span></div>
+      <div class="stat"><b id="s2Mem">—</b><span>🧠 прочность памяти</span></div>
     </div>
     <div class="panel">
       <h2 style="margin-bottom:6px">Как это работает</h2>
-      <div class="mut sm">Cortex использует алгоритм интервальных повторений (SM-2): чем лучше ты помнишь карточку, тем реже она появляется. «Снова» вернёт её в сегодняшнюю очередь, «Легко» отправит далеко в будущее. 10 минут в день достаточно.</div>
+      <div class="mut sm">Cortex считает для каждой карточки кривую забывания Эббингауза: «прочность памяти» — это вероятность, что ты ещё помнишь ответ. Алгоритм SM-2 подбирает момент повторения так, чтобы ловить карточку у края забывания — так знания держатся годами при минимуме усилий.</div>
     </div>
   </section>
 </div>
@@ -317,7 +362,8 @@ label.lb{display:block;font-size:12px;font-weight:700;color:var(--mut);margin:10
 <script>
 'use strict';
 /* ============================================================
-   Cortex — компактный тренажёр памяти. Один файл, ноль зависимостей.
+   Cortex v2 — тренажёр памяти с мозгом-питомцем.
+   Один файл, ноль зависимостей, всё офлайн.
    ============================================================ */
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -329,33 +375,45 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
 
 /* ---------- state ---------- */
 const KEY = 'cortex_v1';
+function newCard(front, back) {
+  return { id: uid(), type: 'basic', front, back, ef: 2.5, ivl: 0, reps: 0, lapses: 0, due: Date.now(), created: Date.now(), last: null };
+}
+function newCloze(text, idx) {
+  return { id: uid(), type: 'cloze', text, idx, ef: 2.5, ivl: 0, reps: 0, lapses: 0, due: Date.now(), created: Date.now(), last: null };
+}
 const demoDeck = () => ({
   id: uid(), name: 'Учимся учиться', emoji: '🎓',
   cards: [
-    ['Что такое интервальное повторение?', 'Повторение материала через растущие промежутки времени — самый доказанный способ запоминать надолго.'],
-    ['Сколько «помидорок» в классическом Pomodoro-цикле до длинного перерыва?', '4 сессии по 25 минут.'],
-    ['Что эффективнее: перечитывать конспект или вспоминать по памяти?', 'Активное вспоминание (recall) — в 2–3 раза эффективнее перечитывания.'],
-    ['Что такое «кривая забывания» Эббингауза?', 'График того, как быстро мы забываем: без повторений через сутки теряется до 60–70% информации.'],
-    ['Зачем спать перед экзаменом, а не зубрить всю ночь?', 'Во сне мозг консолидирует память — переносит знания в долговременное хранилище.'],
-    ['Свайп/тап по карточке — что делает?', 'Переворачивает её и показывает ответ. Потом честно оцени, как хорошо ты помнил(а).'],
-  ].map(([f, b]) => newCard(f, b)),
+    newCard('Что такое интервальное повторение?', 'Повторение материала через растущие промежутки времени — самый доказанный способ запоминать надолго.'),
+    newCard('Что эффективнее: перечитывать конспект или вспоминать по памяти?', 'Активное вспоминание (recall) — в 2–3 раза эффективнее перечитывания.'),
+    newCard('Зачем спать перед экзаменом, а не зубрить всю ночь?', 'Во сне мозг консолидирует память — переносит знания в долговременное хранилище.'),
+    newCloze('Кривая {{забывания}} Эббингауза показывает: без повторений за сутки теряется до 70% информации.', 0),
+    newCloze('В классическом Pomodoro-цикле {{4}} сессии по 25 минут до длинного перерыва.', 0),
+    newCard('Свайп/тап по карточке — что делает?', 'Переворачивает её и показывает ответ. Потом честно оцени, как хорошо ты помнил(а).'),
+  ],
 });
-function newCard(front, back) {
-  return { id: uid(), front, back, ef: 2.5, ivl: 0, reps: 0, lapses: 0, due: Date.now(), created: Date.now() };
-}
 function defaults() {
   return {
     decks: [demoDeck()],
-    log: {},            // 'YYYY-MM-DD' -> {r: reviews, ok: correct}
+    log: {},            // 'YYYY-MM-DD' -> {r, ok, nw, add, qz}
     pomoLog: {},        // 'YYYY-MM-DD' -> count
-    prefs: { theme: 'auto', goal: 20, newPerDay: 10 },
+    xp: 0,
+    quests: { date: '', done: [] },
+    prefs: { theme: 'auto', goal: 20, newPerDay: 10, typing: false },
   };
 }
 let S;
 try { S = Object.assign(defaults(), JSON.parse(localStorage.getItem(KEY) || 'null') || {}); }
 catch (e) { S = defaults(); }
-// миграция со старых версий: карточка, на которую уже отвечали, — «виденная»
-for (const d of S.decks || []) for (const c of d.cards || []) if (c.seen === undefined && (c.reps > 0 || c.lapses > 0)) c.seen = true;
+// миграции со старых версий
+if (!S.quests) S.quests = { date: '', done: [] };
+if (S.xp === undefined) S.xp = 0;
+if (S.prefs.typing === undefined) S.prefs.typing = false;
+for (const d of S.decks || []) for (const c of d.cards || []) {
+  if (!c.type) c.type = 'basic';
+  if (c.seen === undefined && (c.reps > 0 || c.lapses > 0)) c.seen = true;
+  if (c.last === undefined) c.last = (c.seen && c.ivl > 0) ? c.due - c.ivl * DAY : null;
+}
 let saveT;
 function save() {
   S.updatedAt = Date.now();
@@ -431,6 +489,47 @@ function show(p) {
 $$('nav.tabs button').forEach(b => b.onclick = () => show(b.dataset.p));
 
 /* ============================================================
+   XP / LEVELS
+   ============================================================ */
+const TITLES = ['Неофит', 'Ученик', 'Зубрила', 'Знаток', 'Эрудит', 'Мастер', 'Магистр памяти', 'Гроссмейстер', 'Мудрец', 'Архимаг знаний'];
+const lvlOf = xp => Math.floor(Math.sqrt(Math.max(0, xp) / 60));
+const xpForLvl = l => 60 * l * l;
+function titleOf(l) { return TITLES[Math.min(TITLES.length - 1, Math.floor(l / 2))]; }
+function addXP(n) {
+  const before = lvlOf(S.xp);
+  S.xp += n; save();
+  const after = lvlOf(S.xp);
+  if (after > before) {
+    confetti(160); buzz([40, 40, 90]);
+    setTimeout(() => toast(`🎉 Уровень ${after} — ${titleOf(after)}!`), 400);
+  }
+  if ($('#page-home').classList.contains('on')) renderHome();
+}
+
+/* ============================================================
+   MEMORY MODEL — кривая забывания
+   R = exp(-0.105 · t / ivl): в момент планового повторения R ≈ 90%
+   ============================================================ */
+function retention(c) {
+  if (!c.seen || !c.last || c.ivl <= 0) return null;
+  const t = (Date.now() - c.last) / DAY;
+  return Math.exp(-0.105 * t / c.ivl);
+}
+function deckMemory(d) { // средняя прочность: невиденные считаются нулём
+  if (!d.cards.length) return null;
+  let sum = 0;
+  for (const c of d.cards) sum += retention(c) || 0;
+  return sum / d.cards.length;
+}
+function totalMemory() {
+  const cards = allCards().filter(c => c.seen);
+  if (!cards.length) return null;
+  let sum = 0;
+  for (const c of cards) sum += retention(c) || 0;
+  return sum / cards.length;
+}
+
+/* ============================================================
    SRS — SM-2 lite
    ============================================================ */
 const allCards = () => S.decks.flatMap(d => d.cards);
@@ -446,13 +545,15 @@ function dueCards() {
   const slots = Math.max(0, S.prefs.newPerDay - introducedToday);
   return [...due, ...fresh.slice(0, slots)];
 }
-// «свежая» = ни разу не отвеченная; карточка после «Снова» (reps=0, но seen) — учебная, не новая
-
+function dayLog() {
+  const k = todayKey();
+  return S.log[k] = S.log[k] || { r: 0, ok: 0, nw: 0, add: 0, qz: 0 };
+}
 function grade(c, g) { // g: 0 again, 1 hard, 2 good, 3 easy
-  const today = todayKey();
-  const L = S.log[today] = S.log[today] || { r: 0, ok: 0, nw: 0 };
+  const L = dayLog();
   if (!c.seen) { L.nw = (L.nw || 0) + 1; c.seen = true; }
   L.r++; if (g >= 2) L.ok++;
+  c.last = Date.now();
   if (g === 0) {
     c.reps = 0; c.lapses++; c.ivl = 0;
     c.ef = Math.max(1.3, c.ef - .2);
@@ -469,17 +570,176 @@ function grade(c, g) { // g: 0 again, 1 hard, 2 good, 3 easy
     c.ivl = Math.min(365, c.ivl);
     c.due = Date.now() + c.ivl * DAY;
   }
+  addXP([2, 6, 10, 12][g]);
   save();
+  checkQuests();
+}
+
+/* ============================================================
+   DAILY QUESTS
+   ============================================================ */
+const QUESTS = [
+  { id: 'rev', icon: '🃏', xp: 60, txt: n => `Сделай ${n} повторений`, n: () => 15, prog: q => Math.min(1, dayLog().r / q.nv), done: q => dayLog().r >= q.nv },
+  { id: 'clear', icon: '🧹', xp: 80, txt: () => 'Разбери всю очередь', n: () => 0, prog: () => dayLog().r > 0 && dueCards().length === 0 ? 1 : Math.min(.95, dayLog().r / Math.max(1, dayLog().r + dueCards().length)), done: () => dayLog().r > 0 && dueCards().length === 0 },
+  { id: 'pomo', icon: '🍅', xp: 60, txt: n => `${n} помидорки фокуса`, n: () => 2, prog: q => Math.min(1, (S.pomoLog[todayKey()] || 0) / q.nv), done: q => (S.pomoLog[todayKey()] || 0) >= q.nv },
+  { id: 'quiz', icon: '⚡', xp: 70, txt: () => 'Квиз на 80%+', n: () => 0, prog: () => Math.min(1, (dayLog().qz || 0) / 80), done: () => (dayLog().qz || 0) >= 80 },
+  { id: 'add', icon: '✍️', xp: 40, txt: n => `Добавь ${n} новые карточки`, n: () => 3, prog: q => Math.min(1, (dayLog().add || 0) / q.nv), done: q => (dayLog().add || 0) >= q.nv },
+  { id: 'acc', icon: '🎯', xp: 70, txt: () => 'Точность 85%+ (от 10 повт.)', n: () => 0, prog: () => { const L = dayLog(); return L.r >= 10 ? Math.min(1, (L.ok / L.r) / .85) : Math.min(.5, L.r / 20); }, done: () => { const L = dayLog(); return L.r >= 10 && L.ok / L.r >= .85; } },
+];
+function seededPick(dateKey) { // 3 детерминированных квеста на день
+  let h = 0;
+  for (const ch of dateKey) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const idx = [];
+  while (idx.length < 3) { h = (h * 1103515245 + 12345) >>> 0; const i = h % QUESTS.length; if (!idx.includes(i)) idx.push(i); }
+  return idx.map(i => { const q = { ...QUESTS[i] }; q.nv = q.n(); return q; });
+}
+let todaysQuests = null;
+function questsToday() {
+  const k = todayKey();
+  if (S.quests.date !== k) { S.quests = { date: k, done: [] }; todaysQuests = null; save(); }
+  if (!todaysQuests) todaysQuests = seededPick(k);
+  return todaysQuests;
+}
+function checkQuests() {
+  const qs = questsToday();
+  for (const q of qs) {
+    if (!S.quests.done.includes(q.id) && q.done(q)) {
+      S.quests.done.push(q.id);
+      save();
+      setTimeout(() => { toast(`🏆 Квест выполнен: +${q.xp} XP`); addXP(q.xp); confetti(70); }, 250);
+    }
+  }
+  if ($('#page-home').classList.contains('on')) renderQuests();
+}
+function renderQuests() {
+  const qs = questsToday();
+  $('#questList').innerHTML = qs.map(q => {
+    const done = S.quests.done.includes(q.id);
+    const p = done ? 1 : q.prog(q);
+    return `<div class="quest${done ? ' done' : ''}">
+      <div class="qi">${done ? '✅' : q.icon}</div>
+      <div class="grow"><div class="qt">${q.txt(q.nv)}</div>
+        <div class="qminibar"><i style="width:${Math.round(p * 100)}%"></i></div></div>
+      <span class="xp">+${q.xp}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ============================================================
+   BRAIN PET
+   ============================================================ */
+function petMood() {
+  const L = dayLog(), due = dueCards().length;
+  if (due > 30) return 'worried';
+  if ((L.r > 0 && due === 0) || L.r >= S.prefs.goal) return 'happy';
+  if (L.r === 0 && (S.pomoLog[todayKey()] || 0) === 0) return 'sleepy';
+  return 'neutral';
+}
+const PET_LINES = {
+  happy: ['Мы великолепны! Так и запишем… в долговременную память 😌', 'Чувствуешь? Это растут дендриты!', 'Идеально. Теперь можно и помидорку 🍅'],
+  worried: ['Ой-ой, очередь растёт… Разберём хотя бы десяток?', 'Я начинаю кое-что забывать… Повтори со мной!', 'Карточки копятся. Спаси мои синапсы!'],
+  sleepy: ['Я сплю, но одно повторение меня разбудит…', 'Доброе утро? Проверь очередь — я приготовил карточки.', 'Зеваю… Начни с трёх карточек, дальше само пойдёт.'],
+  neutral: ['Продолжаем! Каждое повторение делает след памяти глубже.', 'Совет: честная оценка «Снова» полезнее ложного «Хорошо».', 'Маленькие шаги каждый день сильнее марафона раз в месяц.'],
+};
+function petSVG(lvl, mood) {
+  const size = 96 + Math.min(20, lvl * 2);
+  const closed = mood === 'sleepy';
+  const mouth = mood === 'happy' ? 'M46 72 Q60 84 74 72' : mood === 'worried' ? 'M47 78 Q60 70 73 78' : mood === 'sleepy' ? 'M50 76 Q60 80 70 76' : 'M49 75 Q60 80 71 75';
+  const eyes = closed
+    ? `<path d="M38 56 Q45 61 52 56" stroke="#2b2350" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+       <path d="M68 56 Q75 61 82 56" stroke="#2b2350" stroke-width="3.5" fill="none" stroke-linecap="round"/>`
+    : `<g><ellipse cx="45" cy="56" rx="8.5" ry="9.5" fill="#fff"/><circle cx="46.5" cy="58" r="4.2" fill="#221c3f"/><circle cx="48" cy="56" r="1.4" fill="#fff"/>
+       <rect class="lidL" x="36" y="46" width="18" height="20" rx="9" fill="url(#pg)" opacity=".95"/></g>
+       <g><ellipse cx="75" cy="56" rx="8.5" ry="9.5" fill="#fff"/><circle cx="76.5" cy="58" r="4.2" fill="#221c3f"/><circle cx="78" cy="56" r="1.4" fill="#fff"/>
+       <rect class="lidR" x="66" y="46" width="18" height="20" rx="9" fill="url(#pg)" opacity=".95"/></g>`;
+  const blush = mood === 'happy' ? '<ellipse cx="36" cy="68" rx="5" ry="3" fill="#ff8fa3" opacity=".55"/><ellipse cx="84" cy="68" rx="5" ry="3" fill="#ff8fa3" opacity=".55"/>' : '';
+  const glasses = lvl >= 3 && !closed ? '<g stroke="#ffd76a" stroke-width="2.5" fill="none"><circle cx="45" cy="56" r="12"/><circle cx="75" cy="56" r="12"/><path d="M57 56 h6"/></g>' : '';
+  const cap = lvl >= 5 ? '<g><polygon points="60,8 92,22 60,34 28,22" fill="#2f2a55"/><rect x="55" y="26" width="10" height="9" rx="2" fill="#2f2a55"/><line x1="88" y1="24" x2="88" y2="38" stroke="#ffd76a" stroke-width="2"/><circle cx="88" cy="40" r="3" fill="#ffd76a"/></g>' : '';
+  const crown = lvl >= 8 ? '<polygon points="42,14 50,2 60,12 70,2 78,14" fill="#ffd76a" stroke="#eab308" stroke-width="1.5"/>' : '';
+  const aura = lvl >= 10 ? '<circle cx="60" cy="62" r="52" fill="none" stroke="url(#ag)" stroke-width="2.5" stroke-dasharray="6 8" opacity=".8"/>' : '';
+  const zzz = closed ? '<text x="92" y="34" font-size="15" fill="#8b93a7" font-weight="700">z</text><text x="100" y="24" font-size="11" fill="#8b93a7" font-weight="700">z</text>' : '';
+  return `<svg viewBox="0 0 120 124" width="${size}" aria-label="Мозг-питомец, уровень ${lvl}">
+    <defs>
+      <linearGradient id="pg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a89bff"/><stop offset="1" stop-color="#7c6cff"/></linearGradient>
+      <linearGradient id="ag" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#00d3a7"/></linearGradient>
+    </defs>
+    ${aura}
+    <ellipse cx="60" cy="64" rx="44" ry="41" fill="url(#pg)"/>
+    <path d="M28 50 Q38 38 52 42 M52 30 Q64 24 72 34 M82 40 Q92 46 90 58" stroke="#fff" stroke-width="3" fill="none" opacity=".28" stroke-linecap="round"/>
+    <path d="M60 24 Q60 50 60 100" stroke="#5f4fd8" stroke-width="2.5" opacity=".35" fill="none"/>
+    ${eyes}${blush}
+    <path d="${mouth}" stroke="#2b2350" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+    ${glasses}${cap}${crown}${zzz}
+  </svg>`;
+}
+function renderPet() {
+  const lvl = lvlOf(S.xp), mood = petMood();
+  $('#petBox').innerHTML = petSVG(lvl, mood);
+  const lines = PET_LINES[mood];
+  const dayN = Math.floor(Date.now() / DAY);
+  $('#petSay').textContent = '💬 ' + lines[dayN % lines.length];
+}
+
+/* ============================================================
+   CARD HELPERS — cloze / Q&A
+   ============================================================ */
+function clozeParts(text) {
+  const re = /\{\{(.+?)\}\}/g, parts = [];
+  let last = 0, m, i = 0;
+  while ((m = re.exec(text))) {
+    parts.push({ t: 'txt', s: text.slice(last, m.index) });
+    parts.push({ t: 'cloze', s: m[1], i: i++ });
+    last = m.index + m[0].length;
+  }
+  parts.push({ t: 'txt', s: text.slice(last) });
+  return parts;
+}
+function clozeHTML(c, revealed) {
+  return clozeParts(c.text).map(p => {
+    if (p.t === 'txt') return esc(p.s);
+    if (p.i !== c.idx) return esc(p.s);
+    return revealed ? `<span class="gapAns">${esc(p.s)}</span>` : `<span class="gap">${esc(p.s)}</span>`;
+  }).join('');
+}
+function cardQA(c) { // единый вид «вопрос/ответ» для квиза и ввода
+  if (c.type === 'cloze') {
+    const hidden = clozeParts(c.text).find(p => p.t === 'cloze' && p.i === c.idx);
+    const q = clozeParts(c.text).map(p => p.t === 'txt' ? p.s : (p.i === c.idx ? '____' : p.s)).join('');
+    return { q, a: hidden ? hidden.s : '' };
+  }
+  return { q: c.front, a: c.back };
+}
+function cardSummary(c) {
+  const qa = cardQA(c);
+  return { fr: qa.q, bk: qa.a };
+}
+/* Левенштейн для проверки набранного ответа */
+function levDist(a, b) {
+  a = a.toLowerCase().trim(); b = b.toLowerCase().trim();
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++)
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
+function similarity(a, b) {
+  const L = Math.max(a.trim().length, b.trim().length);
+  return L ? 1 - levDist(a, b) / L : 1;
 }
 
 /* ============================================================
    STUDY session
    ============================================================ */
-let session = null; // {queue, total, flipped}
+let session = null; // {queue, total, flipped, typed}
 function startStudy() {
   const q = dueCards();
   shuffle(q);
-  session = { queue: q, total: q.length, flipped: false };
+  session = { queue: q, total: q.length, flipped: false, typed: null };
   renderStudy();
 }
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } }
@@ -488,40 +748,75 @@ function renderStudy() {
   if (!session || !session.queue.length) {
     const finished = session && session.total > 0;
     $('#qfill').style.width = '100%';
+    const mem = totalMemory();
     body.innerHTML = `<div class="panel done">
         <div class="big">${finished ? '🎉' : '😌'}</div>
         <h2>${finished ? 'Готово! Все карточки повторены' : 'На сегодня всё чисто'}</h2>
-        <div class="mut sm" style="margin:8px 0 18px">${finished ? 'Мозг говорит спасибо. Возвращайся завтра — интервалы уже посчитаны.' : 'Добавь новые карточки или устрой блиц-квиз.'}</div>
+        <div class="mut sm" style="margin:8px 0 18px">${mem !== null ? `Прочность памяти сейчас: <b>${Math.round(mem * 100)}%</b>. ` : ''}${finished ? 'Мозг говорит спасибо — интервалы уже посчитаны.' : 'Добавь новые карточки или устрой блиц-квиз.'}</div>
         <div class="row" style="justify-content:center;gap:9px">
           <button class="btn ghost" onclick="show('decks')">🃏 К колодам</button>
           <button class="btn green" onclick="startQuizFlow()">⚡ Квиз</button>
         </div>
       </div>`;
-    if (finished) { confetti(); buzz([30, 40, 60]); session = null; renderHome(); }
+    if (finished) { confetti(); buzz([30, 40, 60]); session = null; checkQuests(); renderHome(); }
     return;
   }
   const c = session.queue[0];
   const doneN = session.total - session.queue.length;
   $('#qfill').style.width = (doneN / session.total * 100) + '%';
   const deck = S.decks.find(d => d.cards.includes(c));
+  const typing = S.prefs.typing && c.type === 'basic';
+  const frontHTML = c.type === 'cloze' ? clozeHTML(c, false) : esc(c.front);
+  const backHTML = c.type === 'cloze' ? clozeHTML(c, true) : `<div class="ans">${esc(c.back)}</div>`;
+  const R = retention(c);
   body.innerHTML = `
-    <div class="mut sm" style="margin-bottom:9px">${esc(deck ? deck.emoji + ' ' + deck.name : '')} · ${doneN + 1} / ${session.total}</div>
+    <div class="row sm mut" style="margin-bottom:9px">
+      <span class="grow">${esc(deck ? deck.emoji + ' ' + deck.name : '')} · ${doneN + 1} / ${session.total}${R !== null ? ` · 🧠 ${Math.round(R * 100)}%` : ' · новая'}</span>
+      <button class="chip" id="typeToggle" title="Режим ввода ответа">${S.prefs.typing ? '⌨ вкл' : '⌨ выкл'}</button>
+    </div>
     <div class="study"><div class="flash${session.flipped ? ' flip' : ''}" id="flash">
-      <div class="face"><span class="tag">Вопрос</span><div>${esc(c.front)}</div></div>
-      <div class="face back"><span class="tag">Ответ</span><div class="ans">${esc(c.back)}</div></div>
+      <div class="face"><span class="tag">${c.type === 'cloze' ? 'Заполни пропуск' : 'Вопрос'}</span><div>${frontHTML}</div></div>
+      <div class="face back"><span class="tag">Ответ</span><div>${backHTML}</div>${session.typed !== null ? typedDiffHTML(c) : ''}</div>
     </div></div>
+    ${!session.flipped && typing ? `
+    <div class="typebox">
+      <input class="txt" id="typeIn" placeholder="Введи ответ и жми Enter…" autocomplete="off">
+    </div>
+    <div class="hint" style="margin-top:10px"><span class="kbd">Enter</span> — проверить · тап по карточке — просто показать</div>` : ''}
     ${session.flipped ? `
     <div class="grades">
-      <button class="grade g0" data-g="0">Снова<small>10 мин</small></button>
-      <button class="grade g1" data-g="1">Трудно<small>${fmtIvl(previewIvl(c,1))}</small></button>
-      <button class="grade g2" data-g="2">Хорошо<small>${fmtIvl(previewIvl(c,2))}</small></button>
-      <button class="grade g3" data-g="3">Легко<small>${fmtIvl(previewIvl(c,3))}</small></button>
+      <button class="grade g0 ${sugClass(c,0)}" data-g="0">Снова<small>10 мин</small></button>
+      <button class="grade g1 ${sugClass(c,1)}" data-g="1">Трудно<small>${fmtIvl(previewIvl(c,1))}</small></button>
+      <button class="grade g2 ${sugClass(c,2)}" data-g="2">Хорошо<small>${fmtIvl(previewIvl(c,2))}</small></button>
+      <button class="grade g3 ${sugClass(c,3)}" data-g="3">Легко<small>${fmtIvl(previewIvl(c,3))}</small></button>
     </div>
-    <div class="hint">клавиши <span class="kbd">1</span>–<span class="kbd">4</span></div>` : `
-    <div class="hint" style="margin-top:14px">тапни карточку или жми <span class="kbd">пробел</span>, чтобы увидеть ответ</div>`}
+    <div class="hint">клавиши <span class="kbd">1</span>–<span class="kbd">4</span></div>` : (!typing ? `
+    <div class="hint" style="margin-top:14px">тапни карточку или жми <span class="kbd">пробел</span>, чтобы увидеть ответ</div>` : '')}
   `;
-  $('#flash').onclick = flipCard;
+  $('#flash').onclick = () => flipCard();
   $$('.grade').forEach(b => b.onclick = () => answer(+b.dataset.g));
+  const tt = $('#typeToggle');
+  if (tt) tt.onclick = e => { e.stopPropagation(); S.prefs.typing = !S.prefs.typing; save(); renderStudy(); };
+  const ti = $('#typeIn');
+  if (ti) {
+    ti.focus();
+    ti.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { session.typed = ti.value; flipCard(); }
+      e.stopPropagation();
+    });
+  }
+}
+function sugClass(c, g) {
+  if (session.typed === null) return '';
+  const sim = similarity(session.typed, cardQA(c).a);
+  const sug = sim >= .92 ? 2 : sim >= .7 ? 1 : 0;
+  return g === sug ? 'sug' : '';
+}
+function typedDiffHTML(c) {
+  const target = cardQA(c).a;
+  const sim = similarity(session.typed, target);
+  const verdict = sim >= .92 ? '<span class="tOk">✓ точно!</span>' : sim >= .7 ? '<span style="color:var(--warn)">≈ почти</span>' : '<span class="tNo" style="text-decoration:none">✗ мимо</span>';
+  return `<div class="typediff">${verdict} · ты: <span class="${sim >= .92 ? 'tOk' : 'tNo'}">${esc(session.typed || '—')}</span></div>`;
 }
 function previewIvl(c, g) {
   const t = { ...c };
@@ -537,14 +832,14 @@ function flipCard() {
   const f = $('#flash'); if (!f) return;
   session.flipped = !session.flipped;
   f.classList.toggle('flip', session.flipped);
-  if (session.flipped) setTimeout(renderStudy, 260); else renderStudy();
+  if (session.flipped) setTimeout(renderStudy, 260); else { session.typed = null; renderStudy(); }
 }
 function answer(g) {
   if (!session || !session.flipped || quiz) return;
   const c = session.queue.shift();
   grade(c, g);
   if (g === 0) session.queue.push(c); // вернётся в конец очереди
-  session.flipped = false;
+  session.flipped = false; session.typed = null;
   buzz(12);
   renderStudy();
 }
@@ -563,16 +858,16 @@ $('#startStudy').onclick = () => show('study');
 let quiz = null;
 function startQuizFlow() {
   closeSheet();
-  const pool = allCards().filter(c => c.back.length);
+  const pool = allCards().map(c => cardQA(c)).filter(x => x.a);
   if (pool.length < 4) return toast('Нужно минимум 4 карточки для квиза');
   shuffle(pool);
   const qs = pool.slice(0, Math.min(10, pool.length)).map(c => {
-    const wrong = shuffleCopy([...new Set(pool.filter(x => x !== c && x.back !== c.back).map(x => x.back))]).slice(0, 3);
-    const opts = shuffleCopy([c.back, ...wrong]);
-    return { q: c.front, a: c.back, opts };
+    const wrong = shuffleCopy([...new Set(pool.filter(x => x !== c && x.a !== c.a).map(x => x.a))]).slice(0, 3);
+    const opts = shuffleCopy([c.a, ...wrong]);
+    return { q: c.q, a: c.a, opts };
   });
   quiz = { qs, i: 0, ok: 0, locked: false };
-  show('study'); // reuse the study page shell
+  show('study');
   renderQuiz();
 }
 const shuffleCopy = a => { const b = [...a]; shuffle(b); return b; };
@@ -581,9 +876,13 @@ function renderQuiz() {
   if (quiz.i >= quiz.qs.length) {
     const pct = Math.round(quiz.ok / quiz.qs.length * 100);
     $('#qfill').style.width = '100%';
+    const L = dayLog();
+    L.qz = Math.max(L.qz || 0, pct);
+    addXP(quiz.ok * 8);
+    save(); checkQuests();
     body.innerHTML = `<div class="panel done">
       <div class="big">${pct >= 80 ? '🏆' : pct >= 50 ? '💪' : '📚'}</div>
-      <h2>${quiz.ok} из ${quiz.qs.length} · ${pct}%</h2>
+      <h2>${quiz.ok} из ${quiz.qs.length} · ${pct}% · +${quiz.ok * 8} XP</h2>
       <div class="mut sm" style="margin:8px 0 18px">${pct >= 80 ? 'Блестяще! Так держать.' : pct >= 50 ? 'Неплохо! Слабые места подтянут повторения.' : 'Отличный повод пройтись по карточкам ещё раз.'}</div>
       <div class="row" style="justify-content:center;gap:9px">
         <button class="btn ghost" onclick="startQuizFlow()">Ещё раз ⚡</button>
@@ -625,10 +924,13 @@ function renderDecks() {
   const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
   list.innerHTML = S.decks.map(d => {
     const due = d.cards.filter(c => c.due <= endOfDay.getTime()).length;
+    const mem = deckMemory(d);
+    const exam = d.exam ? Math.ceil((new Date(d.exam + 'T23:59:59') - Date.now()) / DAY) : null;
     return `<div class="deck" data-id="${d.id}">
       <div class="emo">${esc(d.emoji)}</div>
       <div class="grow"><b>${esc(d.name)}</b>
-        <div class="sm mut">${d.cards.length} карт.${due ? ` · <span class="due">${due} к повторению</span>` : ''}</div>
+        <div class="sm mut">${d.cards.length} карт.${due ? ` · <span class="due">${due} к повторению</span>` : ''}${exam !== null ? (exam >= 0 ? ` · 📅 экзамен через ${exam} дн` : ' · 📅 экзамен прошёл') : ''}</div>
+        ${mem !== null ? `<div class="membar" title="Прочность памяти ${Math.round(mem * 100)}%"><i style="width:${Math.round(mem * 100)}%"></i></div>` : ''}
       </div>
       <span class="mut">›</span>
     </div>`;
@@ -641,8 +943,12 @@ function deckForm(deck) {
     <h2 style="margin-bottom:6px">${deck ? 'Редактировать колоду' : 'Новая колода'}</h2>
     <label class="lb">Название</label>
     <input class="txt" id="dName" maxlength="40" value="${deck ? esc(deck.name) : ''}" placeholder="Например: Английские слова">
-    <label class="lb">Эмодзи</label>
-    <input class="txt" id="dEmo" maxlength="4" value="${deck ? esc(deck.emoji) : '📘'}" style="width:90px;text-align:center;font-size:20px">
+    <div class="row" style="gap:10px">
+      <div><label class="lb">Эмодзи</label>
+      <input class="txt" id="dEmo" maxlength="4" value="${deck ? esc(deck.emoji) : '📘'}" style="width:80px;text-align:center;font-size:20px"></div>
+      <div class="grow"><label class="lb">Дата экзамена (не обязательно)</label>
+      <input class="txt" id="dExam" type="date" value="${deck && deck.exam ? esc(deck.exam) : ''}"></div>
+    </div>
     <div class="row" style="margin-top:18px;gap:9px">
       <button class="btn grow" id="dSave">Сохранить</button>
       ${deck ? '<button class="btn ghost" id="dDel">🗑</button>' : ''}
@@ -653,8 +959,9 @@ function deckForm(deck) {
     const name = $('#dName').value.trim();
     if (!name) return toast('Введи название');
     const emoji = $('#dEmo').value.trim() || '📘';
-    if (deck) { deck.name = name; deck.emoji = emoji; }
-    else S.decks.push({ id: uid(), name, emoji, cards: [] });
+    const exam = $('#dExam').value || null;
+    if (deck) { deck.name = name; deck.emoji = emoji; deck.exam = exam; }
+    else S.decks.push({ id: uid(), name, emoji, exam, cards: [] });
     save(); closeSheet(); renderDecks(); toast(deck ? 'Сохранено' : '✨ Колода создана');
     if (!deck) openDeck(S.decks[S.decks.length - 1].id);
   };
@@ -667,27 +974,34 @@ function deckForm(deck) {
 function openDeck(id) {
   const d = S.decks.find(x => x.id === id);
   if (!d) return;
+  const mem = deckMemory(d);
   openSheet(`
-    <div class="row" style="margin-bottom:10px">
+    <div class="row" style="margin-bottom:6px">
       <div style="font-size:26px">${esc(d.emoji)}</div>
       <h2 class="grow">${esc(d.name)}</h2>
       <button class="btn small ghost" id="dEdit">✎</button>
     </div>
-    <div class="row" style="gap:8px;margin-bottom:12px">
+    ${mem !== null ? `<div class="sm mut" style="margin-bottom:8px">🧠 прочность памяти: <b>${Math.round(mem * 100)}%</b></div>` : ''}
+    <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn small grow" id="cAdd">+ Карточка</button>
+      <button class="btn small ghost" id="cBulk">📋 Из текста</button>
       <button class="btn small ghost" id="dExport">Экспорт</button>
     </div>
-    <div id="cardList">${d.cards.length ? d.cards.map(c => `
+    <div id="cardList">${d.cards.length ? d.cards.map(c => {
+      const s = cardSummary(c);
+      return `
       <div class="cardrow" data-id="${c.id}">
-        <div class="grow"><div class="fr">${esc(c.front)}</div><div class="bk">${esc(c.back)}</div>
-          <div class="sm mut">${c.reps ? `интервал ${fmtIvl(c.ivl || 1)}` : 'новая'}</div></div>
+        <div class="grow"><div class="fr">${c.type === 'cloze' ? '⬚ ' : ''}${esc(s.fr)}</div><div class="bk">${esc(s.bk)}</div>
+          <div class="sm mut">${c.seen ? `интервал ${fmtIvl(c.ivl || 1)} · 🧠 ${Math.round((retention(c) || 0) * 100)}%` : 'новая'}</div></div>
         <button class="iconbtn cEdit">✎</button><button class="iconbtn cDel">🗑</button>
-      </div>`).join('') : '<div class="empty"><div class="e">✍️</div>Добавь первую карточку</div>'}
+      </div>`;
+    }).join('') : '<div class="empty"><div class="e">✍️</div>Добавь первую карточку</div>'}
     </div>`);
   $('#dEdit').onclick = () => deckForm(d);
   $('#cAdd').onclick = () => cardForm(d);
+  $('#cBulk').onclick = () => bulkForm(d);
   $('#dExport').onclick = () => {
-    const blob = new Blob([JSON.stringify({ name: d.name, emoji: d.emoji, cards: d.cards.map(c => ({ front: c.front, back: c.back })) }, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ name: d.name, emoji: d.emoji, cards: d.cards.map(c => c.type === 'cloze' ? { type: 'cloze', text: c.text, idx: c.idx } : { front: c.front, back: c.back }) }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = d.name.replace(/\s+/g, '_') + '.json'; a.click();
     URL.revokeObjectURL(a.href); toast('Экспортировано 📤');
@@ -702,34 +1016,114 @@ function openDeck(id) {
   });
 }
 function cardForm(deck, card) {
+  const isCloze = card ? card.type === 'cloze' : false;
   openSheet(`
     <h2 style="margin-bottom:6px">${card ? 'Редактировать' : 'Новая карточка'} · ${esc(deck.emoji)} ${esc(deck.name)}</h2>
-    <label class="lb">Вопрос (лицо)</label>
-    <textarea class="txt" id="cF" rows="2" placeholder="Что спрашиваем?">${card ? esc(card.front) : ''}</textarea>
-    <label class="lb">Ответ (оборот)</label>
-    <textarea class="txt" id="cB" rows="3" placeholder="Правильный ответ">${card ? esc(card.back) : ''}</textarea>
+    ${card ? '' : `<div class="seg" style="margin-top:8px" id="ctype">
+      <button data-t="basic" class="on">Вопрос–ответ</button>
+      <button data-t="cloze">Пропуск ⬚</button>
+    </div>`}
+    <div id="cFields"></div>
     <div class="row" style="margin-top:18px;gap:9px">
       <button class="btn grow" id="cSave">${card ? 'Сохранить' : 'Добавить'}</button>
       ${card ? '' : '<button class="btn ghost" id="cSaveMore">+ ещё</button>'}
       <button class="btn ghost" onclick="openDeck('${deck.id}')">Назад</button>
     </div>`);
-  $('#cF').focus();
-  const commit = () => {
-    const f = $('#cF').value.trim(), b = $('#cB').value.trim();
-    if (!f || !b) { toast('Заполни обе стороны'); return false; }
-    if (card) { card.front = f; card.back = b; }
-    else deck.cards.push(newCard(f, b));
-    save(); return true;
+  let type = isCloze ? 'cloze' : 'basic';
+  const renderFields = () => {
+    $('#cFields').innerHTML = type === 'cloze' ? `
+      <label class="lb">Текст с пропуском</label>
+      <textarea class="txt" id="cT" rows="3" placeholder="Столица Франции — {{Париж}}.">${card && card.type === 'cloze' ? esc(card.text) : ''}</textarea>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <button class="btn small ghost" id="wrapSel">⬚ Скрыть выделенное</button>
+        <span class="sm mut grow">Оберни слово в {{двойные скобки}} — каждый пропуск станет карточкой</span>
+      </div>` : `
+      <label class="lb">Вопрос (лицо)</label>
+      <textarea class="txt" id="cF" rows="2" placeholder="Что спрашиваем?">${card && card.type !== 'cloze' ? esc(card.front) : ''}</textarea>
+      <label class="lb">Ответ (оборот)</label>
+      <textarea class="txt" id="cB" rows="3" placeholder="Правильный ответ">${card && card.type !== 'cloze' ? esc(card.back) : ''}</textarea>`;
+    const ws = $('#wrapSel');
+    if (ws) ws.onclick = () => {
+      const ta = $('#cT'), s = ta.selectionStart, e = ta.selectionEnd;
+      if (s === e) return toast('Сначала выдели слово в тексте');
+      ta.value = ta.value.slice(0, s) + '{{' + ta.value.slice(s, e) + '}}' + ta.value.slice(e);
+      ta.focus();
+    };
+    ($('#cF') || $('#cT')).focus();
   };
-  $('#cSave').onclick = () => { if (commit()) { openDeck(deck.id); toast(card ? 'Сохранено' : '✨ Добавлено'); } };
+  renderFields();
+  $$('#ctype button').forEach(b => b.onclick = () => {
+    type = b.dataset.t;
+    $$('#ctype button').forEach(x => x.classList.toggle('on', x === b));
+    renderFields();
+  });
+  const commit = () => {
+    if (type === 'cloze') {
+      const text = $('#cT').value.trim();
+      const n = clozeParts(text).filter(p => p.t === 'cloze').length;
+      if (!text || !n) { toast('Нужен текст хотя бы с одним {{пропуском}}'); return 0; }
+      if (card) { card.text = text; card.idx = Math.min(card.idx, n - 1); save(); return 1; }
+      for (let i = 0; i < n; i++) deck.cards.push(newCloze(text, i));
+      dayLog().add = (dayLog().add || 0) + n;
+      save(); return n;
+    }
+    const f = $('#cF').value.trim(), b = $('#cB').value.trim();
+    if (!f || !b) { toast('Заполни обе стороны'); return 0; }
+    if (card) { card.front = f; card.back = b; save(); return 1; }
+    deck.cards.push(newCard(f, b));
+    dayLog().add = (dayLog().add || 0) + 1;
+    save(); return 1;
+  };
+  $('#cSave').onclick = () => { const n = commit(); if (n) { checkQuests(); openDeck(deck.id); toast(card ? 'Сохранено' : `✨ Добавлено: ${n}`); } };
   const more = $('#cSaveMore');
-  if (more) more.onclick = () => { if (commit()) { $('#cF').value = ''; $('#cB').value = ''; $('#cF').focus(); toast('✨ Добавлено, давай ещё'); } };
+  if (more) more.onclick = () => { const n = commit(); if (n) { checkQuests(); renderFields(); toast(`✨ Добавлено: ${n}, давай ещё`); } };
+}
+function bulkForm(deck) {
+  openSheet(`
+    <h2 style="margin-bottom:6px">📋 Импорт из текста · ${esc(deck.emoji)} ${esc(deck.name)}</h2>
+    <div class="sm mut" style="margin-bottom:8px">Каждая строка — карточка. Раздели вопрос и ответ через <b>таб</b>, <b> — </b>, <b> - </b> или <b>:</b></div>
+    <textarea class="txt" id="bulkT" rows="8" placeholder="фотосинтез — превращение света в глюкозу
+mitochondria: энергостанция клетки
+serendipity - счастливая случайность"></textarea>
+    <div class="sm mut" id="bulkPrev" style="margin-top:8px">—</div>
+    <div class="row" style="margin-top:14px;gap:9px">
+      <button class="btn grow" id="bulkGo" disabled>Добавить</button>
+      <button class="btn ghost" onclick="openDeck('${deck.id}')">Назад</button>
+    </div>`);
+  const parse = txt => txt.split('\n').map(line => {
+    const l = line.trim(); if (!l) return null;
+    for (const sep of ['\t', ' — ', ' - ', ':']) {
+      const i = l.indexOf(sep);
+      if (i > 0 && i < l.length - sep.length) {
+        const f = l.slice(0, i).trim(), b = l.slice(i + sep.length).trim();
+        if (f && b) return [f, b];
+      }
+    }
+    return null;
+  }).filter(Boolean);
+  const ta = $('#bulkT'), prev = $('#bulkPrev'), go = $('#bulkGo');
+  ta.oninput = () => {
+    const rows = parse(ta.value);
+    prev.textContent = rows.length ? `Распознано карточек: ${rows.length} · например: «${rows[0][0]}» → «${rows[0][1]}»` : 'Пока ничего не распознано';
+    go.disabled = !rows.length;
+  };
+  ta.focus();
+  go.onclick = () => {
+    const rows = parse(ta.value);
+    if (!rows.length) return;
+    for (const [f, b] of rows) deck.cards.push(newCard(f, b));
+    dayLog().add = (dayLog().add || 0) + rows.length;
+    save(); checkQuests();
+    openDeck(deck.id);
+    toast(`✨ Добавлено карточек: ${rows.length}`);
+    confetti(60);
+  };
 }
 
 /* ============================================================
    FOCUS (Pomodoro)
    ============================================================ */
-const F = { total: 25 * 60, left: 25 * 60, run: false, mode: 25, t0: 0, endAt: 0, raf: null };
+const F = { total: 25 * 60, left: 25 * 60, run: false, mode: 25, endAt: 0, raf: null };
 const dialRing = $('#dialRing'), CIRC = 647.2;
 function fmtT(s) { s = Math.max(0, Math.ceil(s)); return String(s / 60 | 0).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
 function drawDial() {
@@ -751,8 +1145,9 @@ function finishFocus() {
   buzz([80, 60, 80, 60, 160]);
   if (F.mode === 25) {
     const k = todayKey(); S.pomoLog[k] = (S.pomoLog[k] || 0) + 1; save();
-    confetti(90); toast('🍅 Помидорка готова! Сделай паузу.');
-    renderTomatoes();
+    addXP(30);
+    confetti(90); toast('🍅 Помидорка готова! +30 XP');
+    renderTomatoes(); checkQuests();
     switchFocusMode((S.pomoLog[k] % 4 === 0) ? 15 : 5); // каждая 4-я — длинный отдых
   } else { toast('Перерыв окончен — вперёд! 💪'); switchFocusMode(25); }
 }
@@ -773,19 +1168,20 @@ $('#focusGo').onclick = () => {
   else clearTimeout(F.raf);
 };
 $('#focusReset').onclick = () => resetFocus(F.mode);
-$$('#focusSeg button').forEach(b => b.onclick = () => {
-  $$('#focusSeg button').forEach(x => x.classList.remove('on'));
-  b.classList.add('on'); resetFocus(+b.dataset.m);
-});
+$$('#focusSeg button').forEach(b => b.onclick = () => switchFocusMode(+b.dataset.m));
 function renderTomatoes() {
   const n = S.pomoLog[todayKey()] || 0;
   $('#tomatoes').textContent = n ? '🍅'.repeat(Math.min(n, 12)) + (n > 12 ? ` +${n - 12}` : '') : '—';
 }
 let sharedAC = null;
+function getAC() {
+  const ac = sharedAC = sharedAC || new (window.AudioContext || window.webkitAudioContext)();
+  if (ac.state === 'suspended') ac.resume();
+  return ac;
+}
 function beep() {
   try {
-    const ac = sharedAC = sharedAC || new (window.AudioContext || window.webkitAudioContext)();
-    if (ac.state === 'suspended') ac.resume();
+    const ac = getAC();
     [0, .18, .36].forEach((d, i) => {
       const o = ac.createOscillator(), g = ac.createGain();
       o.connect(g); g.connect(ac.destination);
@@ -797,6 +1193,84 @@ function beep() {
     });
   } catch (e) {}
 }
+
+/* ---------- фоновые звуки: синтез шума, без аудиофайлов ---------- */
+const snd = { type: null, nodes: [], timers: [], gain: null };
+function noiseBuffer(ac, brown) {
+  const len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate);
+  const d = buf.getChannelData(0);
+  let lastOut = 0;
+  for (let i = 0; i < len; i++) {
+    const white = Math.random() * 2 - 1;
+    if (brown) { lastOut = (lastOut + .02 * white) / 1.02; d[i] = lastOut * 3.5; }
+    else d[i] = white;
+  }
+  return buf;
+}
+function stopSound() {
+  snd.nodes.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} });
+  snd.timers.forEach(clearInterval);
+  snd.nodes = []; snd.timers = []; snd.type = null;
+  $$('.sndbtn').forEach(b => b.classList.remove('on'));
+}
+function playSound(type) {
+  if (snd.type === type) { stopSound(); return; }
+  stopSound();
+  try {
+    const ac = getAC();
+    const master = ac.createGain();
+    master.gain.value = (+$('#sndVol').value / 100) * .5;
+    master.connect(ac.destination);
+    snd.gain = master; snd.nodes.push(master);
+    const mk = (brown, freq, q) => {
+      const src = ac.createBufferSource();
+      src.buffer = noiseBuffer(ac, brown); src.loop = true;
+      const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq; f.Q.value = q || .7;
+      src.connect(f); f.connect(master); src.start();
+      snd.nodes.push(src, f);
+      return f;
+    };
+    if (type === 'rain') {
+      mk(false, 1400);
+      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 400;
+      // редкие «капли»: короткие всплески высокочастотного шума
+      snd.timers.push(setInterval(() => {
+        if (Math.random() < .6) return;
+        const s = ac.createBufferSource(); s.buffer = noiseBuffer(ac, false);
+        const g = ac.createGain(), bp = ac.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 2500 + Math.random() * 3000; bp.Q.value = 8;
+        g.gain.setValueAtTime(.12, ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .12);
+        s.connect(bp); bp.connect(g); g.connect(master);
+        s.start(); s.stop(ac.currentTime + .15);
+      }, 350));
+    } else if (type === 'ocean') {
+      const f = mk(true, 600);
+      const lfo = ac.createOscillator(), lg = ac.createGain();
+      lfo.frequency.value = .09; lg.gain.value = 350;
+      lfo.connect(lg); lg.connect(f.frequency); lfo.start();
+      snd.nodes.push(lfo, lg);
+    } else if (type === 'fire') {
+      mk(true, 900);
+      // потрескивание
+      snd.timers.push(setInterval(() => {
+        if (Math.random() < .45) return;
+        const s = ac.createBufferSource(); s.buffer = noiseBuffer(ac, false);
+        const g = ac.createGain(), bp = ac.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 900 + Math.random() * 1800; bp.Q.value = 12;
+        g.gain.setValueAtTime(.001, ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(.2, ac.currentTime + .015);
+        g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .09);
+        s.connect(bp); bp.connect(g); g.connect(master);
+        s.start(); s.stop(ac.currentTime + .12);
+      }, 180));
+    }
+    snd.type = type;
+    $$('.sndbtn').forEach(b => b.classList.toggle('on', b.dataset.s === type));
+  } catch (e) { toast('Звук недоступен в этом браузере'); }
+}
+$$('.sndbtn').forEach(b => b.onclick = () => playSound(b.dataset.s));
+$('#sndVol').oninput = () => { if (snd.gain) snd.gain.gain.value = (+$('#sndVol').value / 100) * .5; };
 
 /* ============================================================
    STATS / HOME
@@ -811,38 +1285,40 @@ function streakInfo() {
     best = Math.max(best, run);
     d.setDate(d.getDate() + 1);
   }
-  // current streak: count back from today (today optional)
   const t = new Date();
   const activeOn = dt => { const k = todayKey(dt); return (S.log[k] && S.log[k].r > 0) || (S.pomoLog[k] > 0); };
-  if (activeOn(t)) { cur = 1; }
+  if (activeOn(t)) cur = 1;
   const back = new Date(t); back.setDate(back.getDate() - 1);
   while (activeOn(back)) { cur++; back.setDate(back.getDate() - 1); }
   return { cur, best };
 }
 function renderHome() {
-  const today = S.log[todayKey()] || { r: 0, ok: 0 };
-  const goal = S.prefs.goal;
-  const pct = Math.min(100, Math.round(today.r / goal * 100));
-  $('#goalPct').textContent = pct + '%';
-  $('#goalRing').style.strokeDashoffset = 251.3 * (1 - pct / 100);
-  $('#goalLine').textContent = `Цель: ${today.r} / ${goal} повторений`;
-  const h = new Date().getHours();
-  $('#greet').textContent = h < 5 ? 'Сова! 🦉' : h < 12 ? 'Доброе утро ☀️' : h < 18 ? 'Добрый день 👋' : 'Добрый вечер 🌙';
+  const today = S.log[todayKey()] || { r: 0 };
+  const lvl = lvlOf(S.xp);
+  $('#lvlTitle').textContent = `${titleOf(lvl)} · ур. ${lvl}`;
+  const base = xpForLvl(lvl), next = xpForLvl(lvl + 1);
+  $('#xpFill').style.width = Math.round((S.xp - base) / (next - base) * 100) + '%';
+  $('#xpLine').textContent = `${S.xp} XP · до следующего уровня ${next - S.xp}`;
   const due = dueCards().length;
   $('#dueN').textContent = due;
   $('#streakN').textContent = streakInfo().cur;
+  const mem = totalMemory();
+  $('#memN').textContent = mem !== null ? Math.round(mem * 100) + '%' : '—';
+  $('#goalMini').textContent = `${today.r || 0}/${S.prefs.goal}`;
   $('#reviewHint').textContent = due ? `В очереди ${due} карточ${due % 10 === 1 && due % 100 !== 11 ? 'ка' : due % 10 >= 2 && due % 10 <= 4 && (due % 100 < 12 || due % 100 > 14) ? 'ки' : 'ек'}` : 'Очередь пуста — красота!';
-  $('#stToday').textContent = today.r;
+  $('#stToday').textContent = today.r || 0;
   $('#stTotal').textContent = Object.values(S.log).reduce((a, x) => a + (x.r || 0), 0);
   $('#stCards').textContent = allCards().length;
+  renderPet();
+  renderQuests();
 }
 function renderStats() {
   const heat = $('#heat');
   const cells = [];
   const end = new Date(); end.setHours(23, 59, 59, 999);
   const d = new Date();
-  d.setDate(d.getDate() - 83);      // последние 12 недель, включая сегодня
-  d.setDate(d.getDate() - d.getDay()); // назад до воскресенья — колонки = недели
+  d.setDate(d.getDate() - 83);
+  d.setDate(d.getDate() - d.getDay());
   for (; d <= end; d.setDate(d.getDate() + 1)) {
     const k = todayKey(d);
     const n = ((S.log[k] || {}).r || 0) + (S.pomoLog[k] || 0) * 3;
@@ -860,6 +1336,9 @@ function renderStats() {
   }
   $('#s2Ret').textContent = r ? Math.round(ok / r * 100) + '%' : '—';
   $('#s2Pomo').textContent = Object.values(S.pomoLog).reduce((a, b) => a + b, 0);
+  $('#s2Xp').textContent = S.xp;
+  const mem = totalMemory();
+  $('#s2Mem').textContent = mem !== null ? Math.round(mem * 100) + '%' : '—';
 }
 
 /* ============================================================
@@ -1030,8 +1509,12 @@ $('#setBtn').onclick = () => {
     f.text().then(txt => {
       const data = JSON.parse(txt);
       const cleanCards = arr => (Array.isArray(arr) ? arr : [])
-        .filter(c => c && (c.front || '').toString().trim() && (c.back || '').toString().trim())
-        .map(c => newCard(String(c.front).slice(0, 2000), String(c.back).slice(0, 2000)));
+        .map(c => {
+          if (!c) return null;
+          if (c.type === 'cloze' && (c.text || '').toString().trim()) return newCloze(String(c.text).slice(0, 4000), Math.max(0, c.idx | 0));
+          if ((c.front || '').toString().trim() && (c.back || '').toString().trim()) return newCard(String(c.front).slice(0, 2000), String(c.back).slice(0, 2000));
+          return null;
+        }).filter(Boolean);
       if (Array.isArray(data.decks)) { // full backup
         S = Object.assign(defaults(), data);
         S.decks = data.decks.filter(d => d && Array.isArray(d.cards));
@@ -1051,7 +1534,7 @@ $('#setBtn').onclick = () => {
 renderHome(); renderTomatoes(); drawDial();
 show('home');
 cloudInit();
-console.log('%c🧠 Cortex — учись умно, а не долго', 'font-size:14px;color:#7c6cff;font-weight:bold');
+console.log('%c🧠 Cortex v2 — учись умно, а не долго', 'font-size:14px;color:#7c6cff;font-weight:bold');
 </script>
 </body>
 </html>
