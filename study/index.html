@@ -354,8 +354,17 @@ function defaults() {
 let S;
 try { S = Object.assign(defaults(), JSON.parse(localStorage.getItem(KEY) || 'null') || {}); }
 catch (e) { S = defaults(); }
+// миграция со старых версий: карточка, на которую уже отвечали, — «виденная»
+for (const d of S.decks || []) for (const c of d.cards || []) if (c.seen === undefined && (c.reps > 0 || c.lapses > 0)) c.seen = true;
 let saveT;
-function save() { clearTimeout(saveT); saveT = setTimeout(() => localStorage.setItem(KEY, JSON.stringify(S)), 150); }
+function save() {
+  S.updatedAt = Date.now();
+  clearTimeout(saveT); saveT = setTimeout(flushSave, 150);
+  schedulePush();
+}
+function flushSave() { clearTimeout(saveT); localStorage.setItem(KEY, JSON.stringify(S)); }
+addEventListener('pagehide', flushSave);
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
 
 /* ---------- theme ---------- */
 function applyTheme() {
@@ -431,16 +440,18 @@ function dueCards() {
   const due = [], fresh = [];
   for (const c of allCards()) {
     if (c.due > t) continue;
-    (c.reps === 0 ? fresh : due).push(c);
+    (c.seen ? due : fresh).push(c);
   }
   const introducedToday = (S.log[todayKey()] || {}).nw || 0;
   const slots = Math.max(0, S.prefs.newPerDay - introducedToday);
   return [...due, ...fresh.slice(0, slots)];
 }
+// «свежая» = ни разу не отвеченная; карточка после «Снова» (reps=0, но seen) — учебная, не новая
+
 function grade(c, g) { // g: 0 again, 1 hard, 2 good, 3 easy
   const today = todayKey();
   const L = S.log[today] = S.log[today] || { r: 0, ok: 0, nw: 0 };
-  if (c.reps === 0) L.nw++;
+  if (!c.seen) { L.nw = (L.nw || 0) + 1; c.seen = true; }
   L.r++; if (g >= 2) L.ok++;
   if (g === 0) {
     c.reps = 0; c.lapses++; c.ivl = 0;
@@ -455,13 +466,11 @@ function grade(c, g) { // g: 0 again, 1 hard, 2 good, 3 easy
       else c.ivl = Math.round(c.ivl * c.ef);
       if (g === 3) { c.ivl = Math.max(c.ivl + 1, Math.round(c.ivl * 1.3)); c.ef = Math.min(2.8, c.ef + .15); }
     }
+    c.ivl = Math.min(365, c.ivl);
     c.due = Date.now() + c.ivl * DAY;
   }
   save();
 }
-const ivlLabel = g => {
-  return ['10 мин', '1 дн+', 'интервал', 'x1.3'][g];
-};
 
 /* ============================================================
    STUDY session
@@ -520,17 +529,18 @@ function previewIvl(c, g) {
   const reps = t.reps + 1;
   let ivl = reps === 1 ? 1 : reps === 2 ? 3 : Math.round(t.ivl * t.ef);
   if (g === 3) ivl = Math.max(ivl + 1, Math.round(ivl * 1.3));
-  return ivl;
+  return Math.min(365, ivl);
 }
-const fmtIvl = d => d >= 30 ? Math.round(d / 30) + ' мес' : d >= 7 ? Math.round(d / 7) + ' нед' : d + ' дн';
+const fmtIvl = d => d >= 360 ? '1 год' : d >= 30 ? Math.round(d / 30) + ' мес' : d >= 7 ? Math.round(d / 7) + ' нед' : d + ' дн';
 function flipCard() {
-  if (!session || !session.queue.length) return;
+  if (!session || !session.queue.length || quiz) return;
+  const f = $('#flash'); if (!f) return;
   session.flipped = !session.flipped;
-  const f = $('#flash'); f.classList.toggle('flip', session.flipped);
+  f.classList.toggle('flip', session.flipped);
   if (session.flipped) setTimeout(renderStudy, 260); else renderStudy();
 }
 function answer(g) {
-  if (!session || !session.flipped) return;
+  if (!session || !session.flipped || quiz) return;
   const c = session.queue.shift();
   grade(c, g);
   if (g === 0) session.queue.push(c); // вернётся в конец очереди
@@ -539,8 +549,9 @@ function answer(g) {
   renderStudy();
 }
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && modal.classList.contains('on')) { closeSheet(); return; }
   if (modal.classList.contains('on') || e.target.matches('input,textarea')) return;
-  if (!$('#page-study').classList.contains('on')) return;
+  if (!$('#page-study').classList.contains('on') || quiz) return;
   if (e.code === 'Space') { e.preventDefault(); if (session && !session.flipped) flipCard(); }
   if (['1', '2', '3', '4'].includes(e.key)) answer(+e.key - 1);
 });
@@ -556,7 +567,7 @@ function startQuizFlow() {
   if (pool.length < 4) return toast('Нужно минимум 4 карточки для квиза');
   shuffle(pool);
   const qs = pool.slice(0, Math.min(10, pool.length)).map(c => {
-    const wrong = shuffleCopy(pool.filter(x => x !== c && x.back !== c.back)).slice(0, 3).map(x => x.back);
+    const wrong = shuffleCopy([...new Set(pool.filter(x => x !== c && x.back !== c.back).map(x => x.back))]).slice(0, 3);
     const opts = shuffleCopy([c.back, ...wrong]);
     return { q: c.front, a: c.back, opts };
   });
@@ -742,8 +753,12 @@ function finishFocus() {
     const k = todayKey(); S.pomoLog[k] = (S.pomoLog[k] || 0) + 1; save();
     confetti(90); toast('🍅 Помидорка готова! Сделай паузу.');
     renderTomatoes();
-  } else toast('Перерыв окончен — вперёд! 💪');
-  resetFocus(F.mode);
+    switchFocusMode((S.pomoLog[k] % 4 === 0) ? 15 : 5); // каждая 4-я — длинный отдых
+  } else { toast('Перерыв окончен — вперёд! 💪'); switchFocusMode(25); }
+}
+function switchFocusMode(min) {
+  $$('#focusSeg button').forEach(x => x.classList.toggle('on', +x.dataset.m === min));
+  resetFocus(min);
 }
 function resetFocus(min) {
   F.mode = min; F.total = F.left = min * 60; F.run = false;
@@ -766,9 +781,11 @@ function renderTomatoes() {
   const n = S.pomoLog[todayKey()] || 0;
   $('#tomatoes').textContent = n ? '🍅'.repeat(Math.min(n, 12)) + (n > 12 ? ` +${n - 12}` : '') : '—';
 }
+let sharedAC = null;
 function beep() {
   try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const ac = sharedAC = sharedAC || new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === 'suspended') ac.resume();
     [0, .18, .36].forEach((d, i) => {
       const o = ac.createOscillator(), g = ac.createGain();
       o.connect(g); g.connect(ac.destination);
@@ -836,13 +853,141 @@ function renderStats() {
   const si = streakInfo();
   $('#s2Streak').textContent = si.cur;
   $('#s2Best').textContent = si.best;
-  const cutoff = Date.now() - 30 * DAY;
+  const cutoffKey = todayKey(new Date(Date.now() - 30 * DAY));
   let r = 0, ok = 0;
   for (const [k, v] of Object.entries(S.log)) {
-    if (new Date(k).getTime() >= cutoff) { r += v.r || 0; ok += v.ok || 0; }
+    if (k >= cutoffKey) { r += v.r || 0; ok += v.ok || 0; }
   }
   $('#s2Ret').textContent = r ? Math.round(ok / r * 100) + '%' : '—';
   $('#s2Pomo').textContent = Object.values(S.pomoLog).reduce((a, b) => a + b, 0);
+}
+
+/* ============================================================
+   CLOUD SYNC — Supabase (local-first, last-write-wins по updatedAt)
+   ============================================================ */
+const SB_URL = 'https://fgeseogicphovwroritm.supabase.co';
+const SB_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
+const cloud = { sb: null, user: null, pushT: null, busy: false, last: null, err: null };
+function sdkLoad() {
+  if (window.supabase) return Promise.resolve(true);
+  return new Promise(res => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    s.onload = () => res(true); s.onerror = () => res(false);
+    document.head.appendChild(s);
+  });
+}
+async function getSb() {
+  if (cloud.sb) return cloud.sb;
+  if (!(await sdkLoad()) || !window.supabase) return null;
+  cloud.sb = window.supabase.createClient(SB_URL, SB_KEY);
+  return cloud.sb;
+}
+function hasStoredSession() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('sb-') && k.includes('auth-token')) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+async function cloudInit() {
+  if (!hasStoredSession()) return; // не грузим SDK, пока пользователь не входил
+  const sb = await getSb(); if (!sb) return;
+  const { data } = await sb.auth.getSession(); // читает локально — работает офлайн
+  cloud.user = data && data.session ? data.session.user : null;
+  sb.auth.onAuthStateChange((ev, s2) => { cloud.user = s2 ? s2.user : null; renderCloudBox(); });
+  if (cloud.user) cloudSync();
+}
+async function cloudSync(manual) {
+  if (cloud.busy) return;
+  const sb = await getSb();
+  if (!sb || !cloud.user) return;
+  cloud.busy = true; cloud.err = null; renderCloudBox();
+  try {
+    const { data: row, error } = await sb.from('cortex_state')
+      .select('data').eq('user_id', cloud.user.id).maybeSingle();
+    if (error) throw error;
+    const remote = row && row.data;
+    if (remote && (remote.updatedAt || 0) > (S.updatedAt || 0)) {
+      S = Object.assign(defaults(), remote);
+      flushSave();
+      applyTheme(); renderHome(); renderTomatoes();
+      if ($('#page-decks').classList.contains('on')) renderDecks();
+      if ($('#page-stats').classList.contains('on')) renderStats();
+      if (manual) toast('⬇️ Данные загружены из облака');
+    } else {
+      await cloudUpsert(sb);
+      if (manual) toast('☁️ Синхронизировано');
+    }
+    cloud.last = Date.now();
+  } catch (e) {
+    cloud.err = (e && e.message) || 'нет сети';
+    if (manual) toast('⚠️ Синхронизация: ' + cloud.err);
+  } finally { cloud.busy = false; renderCloudBox(); }
+}
+async function cloudUpsert(sb) {
+  const { error } = await sb.from('cortex_state')
+    .upsert({ user_id: cloud.user.id, data: S, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+function schedulePush() {
+  if (!cloud.user) return;
+  clearTimeout(cloud.pushT);
+  cloud.pushT = setTimeout(async () => {
+    const sb = await getSb(); if (!sb || !cloud.user) return;
+    try { await cloudUpsert(sb); cloud.last = Date.now(); cloud.err = null; }
+    catch (e) { cloud.err = 'офлайн — отправлю позже'; }
+    renderCloudBox();
+  }, 2500);
+}
+addEventListener('online', () => { if (cloud.user) cloudSync(); });
+function renderCloudBox() {
+  const box = $('#cloudBox'); if (!box) return;
+  if (cloud.user) {
+    box.innerHTML = `
+      <div class="row" style="gap:9px">
+        <div class="grow"><b>${esc(cloud.user.email || 'Аккаунт')}</b>
+          <div class="sm mut">${cloud.busy ? 'синхронизация…' : cloud.err ? '⚠️ ' + esc(cloud.err) : cloud.last ? '✓ синхронизировано' : 'подключено'}</div>
+        </div>
+        <button class="btn small ghost" id="cSync" ${cloud.busy ? 'disabled' : ''}>⟳</button>
+        <button class="btn small ghost" id="cOut">Выйти</button>
+      </div>`;
+    $('#cSync').onclick = () => cloudSync(true);
+    $('#cOut').onclick = async () => {
+      const sb = await getSb(); if (sb) await sb.auth.signOut();
+      cloud.user = null; renderCloudBox(); toast('Вышли из аккаунта');
+    };
+  } else {
+    box.innerHTML = `
+      <div class="sm mut" style="margin-bottom:8px">Вход синхронизирует колоды и прогресс между устройствами.</div>
+      <input class="txt" id="cEmail" type="email" autocomplete="email" placeholder="email" style="margin-bottom:8px">
+      <input class="txt" id="cPass" type="password" autocomplete="current-password" placeholder="пароль (мин. 6 символов)">
+      <div class="row" style="gap:8px;margin-top:10px">
+        <button class="btn small grow" id="cIn">Войти</button>
+        <button class="btn small ghost grow" id="cUp">Создать аккаунт</button>
+      </div>`;
+    const creds = () => {
+      const email = $('#cEmail').value.trim(), pass = $('#cPass').value;
+      if (!email || !pass) { toast('Заполни email и пароль'); return null; }
+      if (pass.length < 6) { toast('Пароль — минимум 6 символов'); return null; }
+      return { email, password: pass };
+    };
+    $('#cIn').onclick = async () => {
+      const c = creds(); if (!c) return;
+      const sb = await getSb(); if (!sb) return toast('Не удалось загрузить SDK — офлайн?');
+      const { data, error } = await sb.auth.signInWithPassword(c);
+      if (error) return toast('⚠️ ' + error.message);
+      cloud.user = data.user; renderCloudBox(); cloudSync(true);
+    };
+    $('#cUp').onclick = async () => {
+      const c = creds(); if (!c) return;
+      const sb = await getSb(); if (!sb) return toast('Не удалось загрузить SDK — офлайн?');
+      const { error } = await sb.auth.signUp({ ...c, options: { emailRedirectTo: location.origin + location.pathname } });
+      toast(error ? '⚠️ ' + error.message : '📬 Проверь почту и подтверди аккаунт');
+    };
+  }
 }
 
 /* ============================================================
@@ -851,6 +996,8 @@ function renderStats() {
 $('#setBtn').onclick = () => {
   openSheet(`
     <h2 style="margin-bottom:12px">Настройки</h2>
+    <label class="lb">☁️ Облако</label>
+    <div id="cloudBox" style="background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:13px"></div>
     <label class="lb">Цель повторений в день</label>
     <input class="txt" id="sGoal" type="number" min="5" max="500" value="${S.prefs.goal}">
     <label class="lb">Новых карточек в день</label>
@@ -864,7 +1011,8 @@ $('#setBtn').onclick = () => {
       <button class="btn grow" id="sSave">Сохранить</button>
       <button class="btn ghost" onclick="closeSheet()">Закрыть</button>
     </div>
-    <div class="mut sm" style="margin-top:14px">Cortex хранит всё локально в браузере — без аккаунтов и серверов. Экспортируй JSON для бэкапа.</div>`);
+    <div class="mut sm" style="margin-top:14px">Cortex работает локально и офлайн; вход в облако — по желанию, для бэкапа и синхронизации между устройствами.</div>`);
+  renderCloudBox();
   $('#sSave').onclick = () => {
     S.prefs.goal = Math.min(500, Math.max(5, +$('#sGoal').value || 20));
     S.prefs.newPerDay = Math.min(100, Math.max(0, +$('#sNew').value || 10));
@@ -881,10 +1029,17 @@ $('#setBtn').onclick = () => {
     const f = e.target.files[0]; if (!f) return;
     f.text().then(txt => {
       const data = JSON.parse(txt);
-      if (data.decks) { // full backup
-        S = Object.assign(defaults(), data); toast('Бэкап восстановлен ✓');
-      } else if (data.cards) { // single deck
-        S.decks.push({ id: uid(), name: data.name || 'Импорт', emoji: data.emoji || '📦', cards: data.cards.map(c => newCard(c.front, c.back)) });
+      const cleanCards = arr => (Array.isArray(arr) ? arr : [])
+        .filter(c => c && (c.front || '').toString().trim() && (c.back || '').toString().trim())
+        .map(c => newCard(String(c.front).slice(0, 2000), String(c.back).slice(0, 2000)));
+      if (Array.isArray(data.decks)) { // full backup
+        S = Object.assign(defaults(), data);
+        S.decks = data.decks.filter(d => d && Array.isArray(d.cards));
+        toast('Бэкап восстановлен ✓');
+      } else if (Array.isArray(data.cards)) { // single deck
+        const cards = cleanCards(data.cards);
+        if (!cards.length) throw 0;
+        S.decks.push({ id: uid(), name: String(data.name || 'Импорт').slice(0, 40), emoji: String(data.emoji || '📦').slice(0, 4), cards });
         toast('Колода импортирована ✓');
       } else throw 0;
       save(); closeSheet(); renderHome(); renderDecks();
@@ -895,6 +1050,7 @@ $('#setBtn').onclick = () => {
 /* ---------- boot ---------- */
 renderHome(); renderTomatoes(); drawDial();
 show('home');
+cloudInit();
 console.log('%c🧠 Cortex — учись умно, а не долго', 'font-size:14px;color:#7c6cff;font-weight:bold');
 </script>
 </body>
