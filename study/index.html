@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#0b0d12">
 <meta name="description" content="Cortex — тренажёр памяти с мозгом-питомцем: интервальные повторения, cloze-карточки, прогноз забывания, квесты и XP, помодоро со звуками природы. Один файл, работает офлайн.">
 <title>Cortex · учись умно</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
 :root{
   --bg:#0b0d12; --bg2:#11141c; --card:#171b26; --card2:#1e2330;
@@ -234,6 +236,29 @@ input[type=range]{accent-color:var(--acc);width:110px}
 .tree .pct{font-size:11px;font-weight:700;color:var(--mut)}
 
 .spk{position:absolute;top:9px;right:11px;font-size:17px;opacity:.65;z-index:2;padding:4px}
+
+/* ---- hero ambience ---- */
+.hero{position:relative;overflow:hidden}
+.hero::before,.hero::after{content:'';position:absolute;width:150px;height:150px;border-radius:50%;filter:blur(46px);opacity:.32;pointer-events:none}
+.hero::before{background:#7c6cff;top:-60px;right:-30px;animation:drift 13s ease-in-out infinite alternate}
+.hero::after{background:#00d3a7;bottom:-70px;left:-40px;animation:drift 17s ease-in-out infinite alternate-reverse}
+@keyframes drift{to{transform:translate(24px,18px) scale(1.15)}}
+.hero>*{position:relative;z-index:1}
+
+/* ---- league ---- */
+.lg-row{display:flex;align-items:center;gap:9px;padding:7px 6px;border-bottom:1px solid var(--line);font-size:14px}
+.lg-row:last-child{border-bottom:0}
+.lg-row .pos{width:26px;text-align:center;font-weight:800;color:var(--mut);flex:none}
+.lg-row.me{background:color-mix(in srgb,var(--acc) 10%,transparent);border-radius:10px;border-bottom-color:transparent}
+.lg-row .lxp{margin-left:auto;font-weight:800;color:var(--acc)}
+
+/* ---- chart ---- */
+#chart svg{width:100%;height:auto;display:block}
+#chart text{font:600 9px -apple-system,sans-serif;fill:var(--mut)}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
 @media (min-width:700px){ body{padding-bottom:90px} }
 </style>
 </head>
@@ -360,6 +385,17 @@ input[type=range]{accent-color:var(--acc);width:110px}
   <!-- ================= STATS ================= -->
   <section class="page" id="page-stats">
     <div class="panel">
+      <div class="row" style="margin-bottom:6px">
+        <h2 class="grow">🏆 Лига недели</h2>
+        <button class="btn small ghost" id="leagueRe" title="Обновить">⟳</button>
+      </div>
+      <div id="leagueBox" class="sm mut">Загрузка…</div>
+    </div>
+    <div class="panel">
+      <h2 style="margin-bottom:8px">Повторения · 30 дней</h2>
+      <div id="chart"></div>
+    </div>
+    <div class="panel">
       <h2 style="margin-bottom:10px">Активность · 12 недель</h2>
       <div class="heat" id="heat"></div>
     </div>
@@ -432,7 +468,10 @@ function defaults() {
     xp: 0,
     quests: { date: '', done: [] },
     boss: { wins: 0, lastWin: '' },
-    prefs: { theme: 'auto', goal: 20, newPerDay: 10, typing: false },
+    week: { key: '', xp: 0 },
+    nick: '',
+    onboarded: 0,
+    prefs: { theme: 'auto', goal: 20, newPerDay: 10, typing: false, uiSnd: true, aiKey: '' },
   };
 }
 let S;
@@ -441,8 +480,13 @@ catch (e) { S = defaults(); }
 // миграции со старых версий
 if (!S.quests) S.quests = { date: '', done: [] };
 if (!S.boss) S.boss = { wins: 0, lastWin: '' };
+if (!S.week) S.week = { key: '', xp: 0 };
+if (S.nick === undefined) S.nick = '';
 if (S.xp === undefined) S.xp = 0;
 if (S.prefs.typing === undefined) S.prefs.typing = false;
+if (S.prefs.uiSnd === undefined) S.prefs.uiSnd = true;
+if (S.prefs.aiKey === undefined) S.prefs.aiKey = '';
+if (S.onboarded === undefined) S.onboarded = (S.xp > 0 || Object.keys(S.log || {}).length) ? 1 : 0;
 for (const d of S.decks || []) for (const c of d.cards || []) {
   if (!c.type) c.type = 'basic';
   if (c.seen === undefined && (c.reps > 0 || c.lapses > 0)) c.seen = true;
@@ -504,6 +548,27 @@ function confTick() {
 }
 const buzz = ms => navigator.vibrate && navigator.vibrate(ms);
 
+/* лёгкие UI-звуки (можно выключить в настройках) */
+function uiTone(freqs, dur = .09, type = 'sine', vol = .1) {
+  if (S.prefs.uiSnd === false) return;
+  try {
+    const ac = getAC();
+    freqs.forEach((f, i) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type; o.frequency.value = f;
+      o.connect(g); g.connect(ac.destination);
+      const t = ac.currentTime + i * .07;
+      g.gain.setValueAtTime(.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + .015);
+      g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      o.start(t); o.stop(t + dur + .03);
+    });
+  } catch (e) {}
+}
+const uiFlip = () => uiTone([420], .06, 'triangle', .07);
+const uiOk = () => uiTone([740, 1108], .12, 'sine', .09);
+const uiNo = () => uiTone([170], .16, 'square', .05);
+
 /* ---------- modal ---------- */
 const modal = $('#modal'), sheet = $('#sheet');
 function openSheet(html) { sheet.innerHTML = html; modal.classList.add('on'); }
@@ -529,9 +594,21 @@ const TITLES = ['Неофит', 'Ученик', 'Зубрила', 'Знаток'
 const lvlOf = xp => Math.floor(Math.sqrt(Math.max(0, xp) / 60));
 const xpForLvl = l => 60 * l * l;
 function titleOf(l) { return TITLES[Math.min(TITLES.length - 1, Math.floor(l / 2))]; }
+function weekKey() {
+  const d = new Date();
+  d.setDate(d.getDate() - (d.getDay() + 6) % 7); // понедельник этой недели
+  return todayKey(d);
+}
 function addXP(n) {
   const before = lvlOf(S.xp);
-  S.xp += n; save();
+  S.xp += n;
+  if (n > 0) { // недельный зачёт для лиги
+    const wk = weekKey();
+    if (S.week.key !== wk) S.week = { key: wk, xp: 0 };
+    S.week.xp += n;
+    scheduleLeaguePush();
+  }
+  save();
   const after = lvlOf(S.xp);
   if (after > before) {
     confetti(160); buzz([40, 40, 90]);
@@ -826,7 +903,8 @@ function renderStudy() {
       <button class="grade g2 ${sugClass(c,2)}" data-g="2">Хорошо<small>${fmtIvl(previewIvl(c,2))}</small></button>
       <button class="grade g3 ${sugClass(c,3)}" data-g="3">Легко<small>${fmtIvl(previewIvl(c,3))}</small></button>
     </div>
-    <div class="hint">клавиши <span class="kbd">1</span>–<span class="kbd">4</span></div>` : (!typing ? `
+    <div class="hint">клавиши <span class="kbd">1</span>–<span class="kbd">4</span></div>
+    <div class="row" style="justify-content:center;margin-top:10px"><button class="chip" id="aiEx">🤖 Объясни проще</button></div>` : (!typing ? `
     <div class="hint" style="margin-top:14px">тапни карточку или жми <span class="kbd">пробел</span>, чтобы увидеть ответ</div>` : '')}
   `;
   $('#flash').onclick = () => flipCard();
@@ -838,6 +916,8 @@ function renderStudy() {
   $$('.grade').forEach(b => b.onclick = () => answer(+b.dataset.g));
   const tt = $('#typeToggle');
   if (tt) tt.onclick = e => { e.stopPropagation(); S.prefs.typing = !S.prefs.typing; save(); renderStudy(); };
+  const ax = $('#aiEx');
+  if (ax) ax.onclick = () => aiExplain(c);
   const ti = $('#typeIn');
   if (ti) {
     ti.focus();
@@ -873,7 +953,7 @@ function flipCard() {
   const f = $('#flash'); if (!f) return;
   session.flipped = !session.flipped;
   f.classList.toggle('flip', session.flipped);
-  if (session.flipped) setTimeout(renderStudy, 260); else { session.typed = null; renderStudy(); }
+  if (session.flipped) { uiFlip(); setTimeout(renderStudy, 260); } else { session.typed = null; renderStudy(); }
 }
 function answer(g) {
   if (!session || !session.flipped || quiz || boss) return;
@@ -882,6 +962,7 @@ function answer(g) {
   if (g === 0) session.queue.push(c); // вернётся в конец очереди
   session.flipped = false; session.typed = null;
   buzz(12);
+  g >= 2 ? uiOk() : uiNo();
   renderStudy();
 }
 document.addEventListener('keydown', e => {
@@ -942,6 +1023,7 @@ function renderQuiz() {
   $$('#opts .opt').forEach(b => b.onclick = () => {
     if (quiz.locked) return; quiz.locked = true;
     const pick = q.opts[+b.dataset.i], right = pick === q.a;
+    right ? uiOk() : uiNo();
     if (right) { quiz.ok++; b.classList.add('ok'); buzz(15); }
     else {
       b.classList.add('no');
@@ -1035,6 +1117,7 @@ function renderBoss(firstWin) {
       if (crit) dmg *= 2;
       boss.hp = Math.max(0, boss.hp - dmg); boss.combo++;
       b.classList.add('ok'); buzz(crit ? [20, 30, 40] : 15);
+      crit ? uiTone([988, 1480], .14, 'sine', .11) : uiOk();
       bc.querySelector('.hpbar i').style.width = boss.hp + '%';
       const f = document.createElement('span');
       f.className = 'dmgfloat' + (crit ? ' crit' : '');
@@ -1045,7 +1128,7 @@ function renderBoss(firstWin) {
       boss.me--; boss.combo = 0;
       b.classList.add('no');
       $$('#opts .opt').forEach(x => { if (q.opts[+x.dataset.i] === q.a) x.classList.add('ok'); });
-      bc.classList.add('shake'); buzz([10, 40, 10, 40]);
+      bc.classList.add('shake'); buzz([10, 40, 10, 40]); uiNo();
     }
     setTimeout(() => {
       boss.locked = false; boss.i++;
@@ -1170,6 +1253,94 @@ function speak(txt) {
 }
 
 /* ============================================================
+   AI — генерация карточек и объяснения (Claude API, ключ пользователя)
+   Ключ хранится только в localStorage и уходит только на api.anthropic.com
+   ============================================================ */
+async function aiCall(system, user, maxTok = 1500) {
+  const key = S.prefs.aiKey;
+  if (!key) throw new Error('нет API-ключа (добавь в Настройках)');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: maxTok,
+      system,
+      messages: [{ role: 'user', content: user }],
+    }),
+  });
+  if (!res.ok) {
+    let msg = 'HTTP ' + res.status;
+    try { msg = (await res.json()).error.message.slice(0, 140); } catch (e) {}
+    throw new Error(msg);
+  }
+  const j = await res.json();
+  return (j.content || []).map(b => b.text || '').join('');
+}
+function aiForm(deck) {
+  openSheet(`
+    <h2 style="margin-bottom:6px">🤖 AI-карточки · ${esc(deck.emoji)} ${esc(deck.name)}</h2>
+    ${S.prefs.aiKey ? '' : '<div class="sm" style="color:var(--warn);margin:6px 0">Нужен API-ключ Anthropic — добавь его в Настройках (⚙). Ключ живёт только в твоём браузере.</div>'}
+    <label class="lb">Тема или конспект</label>
+    <textarea class="txt" id="aiT" rows="6" placeholder="Например: «Органоиды клетки, 9 класс» — или вставь сюда кусок конспекта / статьи"></textarea>
+    <div class="row" style="gap:8px;margin-top:10px">
+      <select class="txt" id="aiN" style="width:auto"><option>6</option><option selected>10</option><option>15</option></select>
+      <button class="btn grow" id="aiGo" ${S.prefs.aiKey ? '' : 'disabled'}>Сгенерировать</button>
+      <button class="btn ghost" onclick="openDeck('${deck.id}')">Назад</button>
+    </div>
+    <div id="aiOut" style="margin-top:12px"></div>`);
+  $('#aiT').focus();
+  $('#aiGo').onclick = async () => {
+    const topic = $('#aiT').value.trim();
+    if (!topic) return toast('Опиши тему или вставь конспект');
+    const n = +$('#aiN').value;
+    $('#aiOut').innerHTML = '<div class="empty"><div class="e">🤖</div>Думаю…</div>';
+    $('#aiGo').disabled = true;
+    try {
+      const txt = await aiCall(
+        'Ты создаёшь учебные флеш-карточки. Отвечай ТОЛЬКО валидным JSON-массивом объектов вида {"q":"вопрос","a":"краткий ответ"}. Без markdown и пояснений.',
+        `Составь ${n} флеш-карточек (вопрос-ответ) по этому материалу или теме. Вопросы конкретные и разнообразные, ответы 1-2 предложения. Язык — как в материале.\n\n${topic.slice(0, 6000)}`,
+        2200);
+      const m = txt.match(/\[[\s\S]*\]/);
+      if (!m) throw new Error('не смог разобрать ответ модели');
+      const cards = JSON.parse(m[0]).filter(c => c && typeof c.q === 'string' && typeof c.a === 'string' && c.q.trim() && c.a.trim());
+      if (!cards.length) throw new Error('пустой результат');
+      $('#aiOut').innerHTML = `<div class="sm mut" style="margin-bottom:6px">Готово: ${cards.length} карточек — проверь и добавь</div>` +
+        cards.map(c => `<div class="cardrow"><div class="grow"><div class="fr">${esc(c.q)}</div><div class="bk">${esc(c.a)}</div></div></div>`).join('') +
+        `<button class="btn grow" id="aiAdd" style="margin-top:10px">✨ Добавить все</button>`;
+      $('#aiAdd').onclick = () => {
+        for (const c of cards) deck.cards.push(newCard(c.q.slice(0, 2000), c.a.slice(0, 2000)));
+        dayLog().add = (dayLog().add || 0) + cards.length;
+        save(); checkQuests(); confetti(80);
+        openDeck(deck.id); toast(`🤖 Добавлено: ${cards.length}`);
+      };
+    } catch (e) {
+      $('#aiOut').innerHTML = `<div class="sm" style="color:var(--bad)">Ошибка: ${esc(e.message)}</div>`;
+    } finally { $('#aiGo').disabled = false; }
+  };
+}
+async function aiExplain(c) {
+  if (!S.prefs.aiKey) return toast('🤖 Добавь API-ключ Anthropic в Настройках');
+  openSheet('<h2>🤖 Объяснение</h2><div class="empty"><div class="e">💭</div>Думаю…</div>');
+  try {
+    const qa = cardQA(c);
+    const txt = await aiCall(
+      'Ты дружелюбный репетитор. Объясняй кратко и простыми словами, 3-6 предложений, по возможности с аналогией или примером. Отвечай на языке вопроса.',
+      `Объясни это проще:\nВопрос: ${qa.q}\nОтвет: ${qa.a}`, 700);
+    openSheet(`<h2>🤖 Объяснение</h2><div style="user-select:text;line-height:1.65;margin-top:10px">${esc(txt)}</div>
+      <button class="btn grow" style="margin-top:14px" onclick="closeSheet()">Понятно!</button>`);
+  } catch (e) {
+    openSheet(`<h2>🤖 Объяснение</h2><div class="sm" style="color:var(--bad);margin-top:8px">Ошибка: ${esc(e.message)}</div>
+      <button class="btn grow" style="margin-top:14px" onclick="closeSheet()">Закрыть</button>`);
+  }
+}
+
+/* ============================================================
    DECKS
    ============================================================ */
 function renderDecks() {
@@ -1242,6 +1413,7 @@ function openDeck(id) {
     <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn small grow" id="cAdd">+ Карточка</button>
       <button class="btn small ghost" id="cBulk">📋 Из текста</button>
+      <button class="btn small ghost" id="cAi">🤖 AI</button>
       <button class="btn small ghost" id="dShare">🔗 Ссылка</button>
       <button class="btn small ghost" id="dExport">Экспорт</button>
     </div>
@@ -1258,6 +1430,7 @@ function openDeck(id) {
   $('#dEdit').onclick = () => deckForm(d);
   $('#cAdd').onclick = () => cardForm(d);
   $('#cBulk').onclick = () => bulkForm(d);
+  $('#cAi').onclick = () => aiForm(d);
   $('#dShare').onclick = async () => {
     if (!d.cards.length) return toast('В колоде пока нет карточек');
     const link = await deckLink(d);
@@ -1637,6 +1810,8 @@ function renderStats() {
   $('#s2Mem').textContent = mem !== null ? Math.round(mem * 100) + '%' : '—';
   $('#s2Boss').textContent = S.boss.wins;
   $('#s2Lvl').textContent = lvlOf(S.xp);
+  renderChart();
+  renderLeague();
 }
 
 /* ============================================================
@@ -1768,6 +1943,103 @@ function renderCloudBox() {
 }
 
 /* ============================================================
+   LEAGUE — недельный лидерборд (Supabase)
+   ============================================================ */
+let leagueT = null;
+function scheduleLeaguePush() {
+  if (!cloud.user || !S.nick) return;
+  clearTimeout(leagueT);
+  leagueT = setTimeout(pushLeague, 4000);
+}
+async function pushLeague() {
+  const sb = await getSb();
+  if (!sb || !cloud.user || !S.nick) return;
+  try {
+    await sb.from('cortex_league').upsert({
+      user_id: cloud.user.id, nick: S.nick.slice(0, 20),
+      xp: S.week.key === weekKey() ? S.week.xp : 0,
+      week: weekKey(), updated_at: new Date().toISOString(),
+    });
+  } catch (e) {}
+}
+async function renderLeague(force) {
+  const box = $('#leagueBox'); if (!box) return;
+  if (!cloud.user) {
+    box.innerHTML = `<div class="sm mut" style="margin-bottom:8px">Соревнуйся в XP с другими учениками. Нужен вход в облако.</div>
+      <button class="btn small" id="lgLogin">☁️ Войти</button>`;
+    $('#lgLogin').onclick = () => $('#setBtn').click();
+    return;
+  }
+  if (!S.nick) {
+    box.innerHTML = `<div class="sm mut" style="margin-bottom:8px">Придумай ник для таблицы лидеров:</div>
+      <div class="row" style="gap:8px">
+        <input class="txt grow" id="lgNick" maxlength="20" placeholder="SuperBrain">
+        <button class="btn small" id="lgSave">В лигу!</button>
+      </div>`;
+    $('#lgSave').onclick = () => {
+      const n = $('#lgNick').value.trim();
+      if (n.length < 2) return toast('Ник — минимум 2 символа');
+      S.nick = n; save();
+      pushLeague().then(() => renderLeague(true));
+    };
+    return;
+  }
+  if (!force && box.dataset.loaded) return;
+  box.innerHTML = '<div class="sm mut">Загрузка таблицы…</div>';
+  try {
+    const sb = await getSb(); if (!sb) throw 0;
+    await pushLeague();
+    const { data, error } = await sb.from('cortex_league')
+      .select('user_id,nick,xp').eq('week', weekKey())
+      .order('xp', { ascending: false }).limit(20);
+    if (error) throw error;
+    box.dataset.loaded = '1';
+    if (!data || !data.length) { box.innerHTML = '<div class="sm mut">Пока пусто — стань первым!</div>'; return; }
+    const medals = ['🥇', '🥈', '🥉'];
+    box.innerHTML = data.map((r, i) => `
+      <div class="lg-row${r.user_id === cloud.user.id ? ' me' : ''}">
+        <span class="pos">${medals[i] || i + 1}</span>
+        <b>${esc(r.nick)}</b>${r.user_id === cloud.user.id ? ' <span class="sm mut">(ты)</span>' : ''}
+        <span class="lxp">${r.xp} XP</span>
+      </div>`).join('') +
+      `<div class="sm mut" style="margin-top:8px">Неделя с ${weekKey()} · XP обнуляется каждый понедельник</div>`;
+  } catch (e) { box.innerHTML = '<div class="sm mut">Не удалось загрузить лигу — офлайн?</div>'; }
+}
+
+/* ============================================================
+   CHART — повторения за 30 дней (одна серия, один цвет)
+   ============================================================ */
+function renderChart() {
+  const box = $('#chart'); if (!box) return;
+  const days = [];
+  let max = 0;
+  for (let i = 29; i >= 0; i--) {
+    const k = todayKey(new Date(Date.now() - i * DAY));
+    const v = (S.log[k] || {}).r || 0;
+    days.push({ k, v });
+    max = Math.max(max, v);
+  }
+  const W = 330, H = 110, bw = W / 30, top = 14, plotH = H - top - 18, base = top + plotH;
+  const barH = v => v ? Math.max(3, plotH * v / (max || 1)) : 2;
+  const bars = days.map((d, i) =>
+    `<rect x="${(i * bw + 1.5).toFixed(1)}" y="${(base - barH(d.v)).toFixed(1)}" width="${(bw - 3).toFixed(1)}" height="${barH(d.v).toFixed(1)}" rx="2"
+      fill="${d.v ? 'var(--acc)' : 'var(--card2)'}"><title>${d.k}: ${d.v} повт.</title></rect>`
+  ).join('');
+  let label = '';
+  if (max > 0) {
+    const mi = days.findIndex(d => d.v === max);
+    const lx = Math.min(W - 10, Math.max(10, mi * bw + bw / 2));
+    label = `<text x="${lx.toFixed(1)}" y="${(base - barH(max) - 4).toFixed(1)}" text-anchor="middle">${max}</text>`;
+  }
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Повторения за 30 дней">
+    <line x1="0" y1="${base + .5}" x2="${W}" y2="${base + .5}" stroke="var(--line)"/>
+    ${bars}${label}
+    <text x="2" y="${H - 4}">${days[0].k.slice(5)}</text>
+    <text x="${W - 2}" y="${H - 4}" text-anchor="end">сегодня</text>
+  </svg>`;
+}
+
+/* ============================================================
    SETTINGS
    ============================================================ */
 $('#setBtn').onclick = () => {
@@ -1779,6 +2051,13 @@ $('#setBtn').onclick = () => {
     <input class="txt" id="sGoal" type="number" min="5" max="500" value="${S.prefs.goal}">
     <label class="lb">Новых карточек в день</label>
     <input class="txt" id="sNew" type="number" min="0" max="100" value="${S.prefs.newPerDay}">
+    <label class="lb">Ник в лиге</label>
+    <input class="txt" id="sNick" maxlength="20" value="${esc(S.nick)}" placeholder="SuperBrain">
+    <label class="lb">🤖 API-ключ Anthropic — для AI-карточек и объяснений</label>
+    <input class="txt" id="sAi" type="password" value="${esc(S.prefs.aiKey)}" placeholder="sk-ant-… (хранится только в этом браузере)">
+    <label class="lb" style="display:flex;align-items:center;gap:9px;text-transform:none;font-size:14px;font-weight:600;color:var(--txt)">
+      <input type="checkbox" id="sUi" ${S.prefs.uiSnd !== false ? 'checked' : ''}> Звуки интерфейса
+    </label>
     <div class="row" style="margin-top:16px;gap:9px;flex-wrap:wrap">
       <button class="btn small ghost" id="sExport">📤 Экспорт всего</button>
       <button class="btn small ghost" id="sImport">📥 Импорт</button>
@@ -1793,6 +2072,10 @@ $('#setBtn').onclick = () => {
   $('#sSave').onclick = () => {
     S.prefs.goal = Math.min(500, Math.max(5, +$('#sGoal').value || 20));
     S.prefs.newPerDay = Math.min(100, Math.max(0, +$('#sNew').value || 10));
+    S.prefs.aiKey = $('#sAi').value.trim();
+    S.prefs.uiSnd = $('#sUi').checked;
+    const nick = $('#sNick').value.trim();
+    if (nick !== S.nick) { S.nick = nick; pushLeague(); const lb = $('#leagueBox'); if (lb) delete lb.dataset.loaded; }
     save(); closeSheet(); renderHome(); toast('Сохранено ✓');
   };
   $('#sExport').onclick = () => {
@@ -1831,9 +2114,26 @@ $('#setBtn').onclick = () => {
 /* ---------- boot ---------- */
 renderHome(); renderTomatoes(); drawDial();
 show('home');
+$('#leagueRe').onclick = () => renderLeague(true);
 importFromHash();
 cloudInit();
-console.log('%c🧠 Cortex v3 — учись умно, а не долго', 'font-size:14px;color:#7c6cff;font-weight:bold');
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol))
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+if (!S.onboarded && !location.hash) setTimeout(() => {
+  openSheet(`
+    <div style="text-align:center;padding:6px 2px">
+      <div style="font-size:52px">🧠</div>
+      <h2 style="font-size:20px;margin:6px 0 2px">Добро пожаловать в Cortex</h2>
+      <div class="mut sm">тренажёр памяти, который хочется открывать каждый день</div>
+    </div>
+    <div class="quest"><div class="qi">⚔️</div><div class="grow"><div class="qt">Побеждай босса дня</div><div class="qp">его бьют твои же карточки — с комбо и критами</div></div></div>
+    <div class="quest"><div class="qi">🌳</div><div class="grow"><div class="qt">Не дай саду завянуть</div><div class="qp">деревья вянут по настоящей кривой забывания</div></div></div>
+    <div class="quest"><div class="qi">🏆</div><div class="grow"><div class="qt">Лига недели</div><div class="qp">соревнуйся в XP с другими учениками</div></div></div>
+    <div class="quest"><div class="qi">📋</div><div class="grow"><div class="qt">Колода за минуту</div><div class="qp">вставь конспект «термин — определение» или сгенерируй с 🤖 AI</div></div></div>
+    <button class="btn grow" id="obGo" style="margin-top:14px">Поехали! 🚀</button>`);
+  $('#obGo').onclick = () => { S.onboarded = 1; save(); closeSheet(); };
+}, 350);
+console.log('%c🧠 Cortex v4 — учись умно, а не долго', 'font-size:14px;color:#7c6cff;font-weight:bold');
 </script>
 </body>
 </html>

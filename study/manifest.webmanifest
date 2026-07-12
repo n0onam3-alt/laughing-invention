@@ -1,0 +1,15 @@
+{
+  "name": "Cortex — учись умно",
+  "short_name": "Cortex",
+  "description": "Тренажёр памяти: карточки с интервальным повторением, босс дня, сад знаний, лига и помодоро. Работает офлайн.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "lang": "ru",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
