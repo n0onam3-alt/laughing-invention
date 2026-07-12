@@ -212,6 +212,28 @@ input[type=range]{accent-color:var(--acc);width:110px}
 .empty{text-align:center;padding:36px 14px;color:var(--mut)}
 .empty .e{font-size:44px;margin-bottom:8px}
 .kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:11px;font-weight:700;background:var(--card2)}
+.lidL,.lidR{transform-box:fill-box}
+
+/* ---- boss battle ---- */
+.bface{display:inline-block;animation:bossIdle 2.6s ease-in-out infinite;filter:drop-shadow(0 4px 10px rgba(255,100,120,.35))}
+@keyframes bossIdle{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-5px) rotate(2deg)}}
+.hpbar{height:12px;border-radius:99px;background:var(--card2);overflow:hidden;border:1px solid var(--line)}
+.hpbar i{display:block;height:100%;background:linear-gradient(90deg,#ff6478,#ff9264);border-radius:99px;transition:width .4s}
+.hearts{font-size:15px;letter-spacing:2px}
+.combo{font-weight:800;color:var(--warn)}
+.shake{animation:shake .45s}
+@keyframes shake{0%,100%{transform:none}20%{transform:translateX(-8px)}40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+.dmgfloat{position:absolute;font-weight:800;font-size:22px;color:#ff6478;animation:dmg .9s forwards;pointer-events:none;z-index:5}
+.dmgfloat.crit{color:#ffd76a;font-size:27px}
+@keyframes dmg{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(-48px) scale(1.35)}}
+
+/* ---- garden ---- */
+.trees{display:flex;gap:7px;overflow-x:auto;padding:4px 0}
+.tree{flex:none;width:76px;text-align:center;cursor:pointer;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:8px 4px 6px;transition:transform .12s}
+.tree:active{transform:scale(.94)}
+.tree .pct{font-size:11px;font-weight:700;color:var(--mut)}
+
+.spk{position:absolute;top:9px;right:11px;font-size:17px;opacity:.65;z-index:2;padding:4px}
 @media (min-width:700px){ body{padding-bottom:90px} }
 </style>
 </head>
@@ -242,6 +264,14 @@ input[type=range]{accent-color:var(--acc);width:110px}
       </div>
     </div>
     <div class="bubble" id="petSay" style="margin:-4px 0 12px"></div>
+
+    <div class="panel" id="bossPanel"></div>
+
+    <div class="panel" id="gardenPanel">
+      <h2 style="margin-bottom:2px">Сад знаний</h2>
+      <div class="sm mut" style="margin-bottom:6px">Каждая колода — дерево. Память тает — оно вянет. Тапни, чтобы полить повторением.</div>
+      <div class="trees" id="trees"></div>
+    </div>
 
     <div class="panel" id="questPanel">
       <div class="row" style="margin-bottom:6px">
@@ -317,13 +347,13 @@ input[type=range]{accent-color:var(--acc);width:110px}
         <button class="btn ghost" id="focusReset">Сброс</button>
       </div>
       <div class="sndrow">
-        <button class="sndbtn" data-s="rain">🌧 Дождь</button>
-        <button class="sndbtn" data-s="ocean">🌊 Океан</button>
-        <button class="sndbtn" data-s="fire">🔥 Костёр</button>
+        <button class="sndbtn" data-s="rain">🌧 Ливень</button>
+        <button class="sndbtn" data-s="surf">🌊 Прибой</button>
+        <button class="sndbtn" data-s="drone">🎧 Гул</button>
         <input type="range" id="sndVol" min="0" max="100" value="45" title="Громкость">
       </div>
       <div class="tomatoes" id="tomatoes"></div>
-      <div class="mut sm" style="margin-top:6px">Помидорки за сегодня · звуки синтезируются на лету, без интернета</div>
+      <div class="mut sm" style="margin-top:6px">Помидорки за сегодня · фоновый звук для фокуса, работает офлайн</div>
     </div>
   </section>
 
@@ -340,6 +370,8 @@ input[type=range]{accent-color:var(--acc);width:110px}
       <div class="stat"><b id="s2Pomo">0</b><span>🍅 помидорок всего</span></div>
       <div class="stat"><b id="s2Xp">0</b><span>⚡ всего XP</span></div>
       <div class="stat"><b id="s2Mem">—</b><span>🧠 прочность памяти</span></div>
+      <div class="stat"><b id="s2Boss">0</b><span>⚔️ боссов побито</span></div>
+      <div class="stat"><b id="s2Lvl">0</b><span>🎖 уровень</span></div>
     </div>
     <div class="panel">
       <h2 style="margin-bottom:6px">Как это работает</h2>
@@ -399,6 +431,7 @@ function defaults() {
     pomoLog: {},        // 'YYYY-MM-DD' -> count
     xp: 0,
     quests: { date: '', done: [] },
+    boss: { wins: 0, lastWin: '' },
     prefs: { theme: 'auto', goal: 20, newPerDay: 10, typing: false },
   };
 }
@@ -407,6 +440,7 @@ try { S = Object.assign(defaults(), JSON.parse(localStorage.getItem(KEY) || 'nul
 catch (e) { S = defaults(); }
 // миграции со старых версий
 if (!S.quests) S.quests = { date: '', done: [] };
+if (!S.boss) S.boss = { wins: 0, lastWin: '' };
 if (S.xp === undefined) S.xp = 0;
 if (S.prefs.typing === undefined) S.prefs.typing = false;
 for (const d of S.decks || []) for (const c of d.cards || []) {
@@ -484,7 +518,7 @@ function show(p) {
   if (p === 'home') renderHome();
   if (p === 'decks') renderDecks();
   if (p === 'stats') renderStats();
-  if (p === 'study') { if (quiz) renderQuiz(); else if (session) renderStudy(); else startStudy(); }
+  if (p === 'study') { if (boss) renderBoss(); else if (quiz) renderQuiz(); else if (session) renderStudy(); else startStudy(); }
 }
 $$('nav.tabs button').forEach(b => b.onclick = () => show(b.dataset.p));
 
@@ -533,11 +567,12 @@ function totalMemory() {
    SRS — SM-2 lite
    ============================================================ */
 const allCards = () => S.decks.flatMap(d => d.cards);
-function dueCards() {
+function dueCards(deckId) {
   const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
   const t = endOfDay.getTime();
   const due = [], fresh = [];
-  for (const c of allCards()) {
+  const pool = deckId ? ((S.decks.find(d => d.id === deckId) || {}).cards || []) : allCards();
+  for (const c of pool) {
     if (c.due > t) continue;
     (c.seen ? due : fresh).push(c);
   }
@@ -585,6 +620,7 @@ const QUESTS = [
   { id: 'quiz', icon: '⚡', xp: 70, txt: () => 'Квиз на 80%+', n: () => 0, prog: () => Math.min(1, (dayLog().qz || 0) / 80), done: () => (dayLog().qz || 0) >= 80 },
   { id: 'add', icon: '✍️', xp: 40, txt: n => `Добавь ${n} новые карточки`, n: () => 3, prog: q => Math.min(1, (dayLog().add || 0) / q.nv), done: q => (dayLog().add || 0) >= q.nv },
   { id: 'acc', icon: '🎯', xp: 70, txt: () => 'Точность 85%+ (от 10 повт.)', n: () => 0, prog: () => { const L = dayLog(); return L.r >= 10 ? Math.min(1, (L.ok / L.r) / .85) : Math.min(.5, L.r / 20); }, done: () => { const L = dayLog(); return L.r >= 10 && L.ok / L.r >= .85; } },
+  { id: 'boss', icon: '⚔️', xp: 90, txt: () => 'Победи босса дня', n: () => 0, prog: () => S.boss.lastWin === todayKey() ? 1 : 0, done: () => S.boss.lastWin === todayKey() },
 ];
 function seededPick(dateKey) { // 3 детерминированных квеста на день
   let h = 0;
@@ -736,8 +772,8 @@ function similarity(a, b) {
    STUDY session
    ============================================================ */
 let session = null; // {queue, total, flipped, typed}
-function startStudy() {
-  const q = dueCards();
+function startStudy(deckId) {
+  const q = dueCards(deckId);
   shuffle(q);
   session = { queue: q, total: q.length, flipped: false, typed: null };
   renderStudy();
@@ -775,8 +811,8 @@ function renderStudy() {
       <button class="chip" id="typeToggle" title="Режим ввода ответа">${S.prefs.typing ? '⌨ вкл' : '⌨ выкл'}</button>
     </div>
     <div class="study"><div class="flash${session.flipped ? ' flip' : ''}" id="flash">
-      <div class="face"><span class="tag">${c.type === 'cloze' ? 'Заполни пропуск' : 'Вопрос'}</span><div>${frontHTML}</div></div>
-      <div class="face back"><span class="tag">Ответ</span><div>${backHTML}</div>${session.typed !== null ? typedDiffHTML(c) : ''}</div>
+      <div class="face"><span class="tag">${c.type === 'cloze' ? 'Заполни пропуск' : 'Вопрос'}</span><button class="spk" data-s="f" title="Озвучить">🔊</button><div>${frontHTML}</div></div>
+      <div class="face back"><span class="tag">Ответ</span><button class="spk" data-s="b" title="Озвучить">🔊</button><div>${backHTML}</div>${session.typed !== null ? typedDiffHTML(c) : ''}</div>
     </div></div>
     ${!session.flipped && typing ? `
     <div class="typebox">
@@ -794,6 +830,11 @@ function renderStudy() {
     <div class="hint" style="margin-top:14px">тапни карточку или жми <span class="kbd">пробел</span>, чтобы увидеть ответ</div>` : '')}
   `;
   $('#flash').onclick = () => flipCard();
+  $$('.spk').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const qa = cardQA(c);
+    speak(b.dataset.s === 'f' ? qa.q.replace(/____/g, 'пропуск') : qa.a);
+  });
   $$('.grade').forEach(b => b.onclick = () => answer(+b.dataset.g));
   const tt = $('#typeToggle');
   if (tt) tt.onclick = e => { e.stopPropagation(); S.prefs.typing = !S.prefs.typing; save(); renderStudy(); };
@@ -828,14 +869,14 @@ function previewIvl(c, g) {
 }
 const fmtIvl = d => d >= 360 ? '1 год' : d >= 30 ? Math.round(d / 30) + ' мес' : d >= 7 ? Math.round(d / 7) + ' нед' : d + ' дн';
 function flipCard() {
-  if (!session || !session.queue.length || quiz) return;
+  if (!session || !session.queue.length || quiz || boss) return;
   const f = $('#flash'); if (!f) return;
   session.flipped = !session.flipped;
   f.classList.toggle('flip', session.flipped);
   if (session.flipped) setTimeout(renderStudy, 260); else { session.typed = null; renderStudy(); }
 }
 function answer(g) {
-  if (!session || !session.flipped || quiz) return;
+  if (!session || !session.flipped || quiz || boss) return;
   const c = session.queue.shift();
   grade(c, g);
   if (g === 0) session.queue.push(c); // вернётся в конец очереди
@@ -846,7 +887,7 @@ function answer(g) {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && modal.classList.contains('on')) { closeSheet(); return; }
   if (modal.classList.contains('on') || e.target.matches('input,textarea')) return;
-  if (!$('#page-study').classList.contains('on') || quiz) return;
+  if (!$('#page-study').classList.contains('on') || quiz || boss) return;
   if (e.code === 'Space') { e.preventDefault(); if (session && !session.flipped) flipCard(); }
   if (['1', '2', '3', '4'].includes(e.key)) answer(+e.key - 1);
 });
@@ -911,6 +952,222 @@ function renderQuiz() {
   });
 }
 $('#startQuiz').onclick = startQuizFlow;
+
+/* ============================================================
+   BOSS BATTLE — босс дня
+   ============================================================ */
+let boss = null;
+const BOSSES = [['👹', 'Прокрастинатор'], ['💀', 'Дедлайн'], ['🐙', 'Хаос в конспектах'], ['🐉', 'Великое Забывание'], ['🤖', 'Экзаменатор-3000'], ['🦑', 'Билет №13'], ['🧟', 'Бессонная Зубрёжка'], ['👻', 'Пробел в знаниях']];
+function bossOfDay() {
+  const k = todayKey();
+  let h = 0;
+  for (const ch of k) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return BOSSES[h % BOSSES.length];
+}
+function startBoss() {
+  const pool = allCards().map(c => cardQA(c)).filter(x => x.a && x.q);
+  if (pool.length < 8) return toast('Для битвы нужно минимум 8 карточек');
+  shuffle(pool);
+  const qs = pool.slice(0, 12).map(c => {
+    const wrong = shuffleCopy([...new Set(pool.filter(x => x !== c && x.a !== c.a).map(x => x.a))]).slice(0, 3);
+    return { q: c.q, a: c.a, opts: shuffleCopy([c.a, ...wrong]) };
+  });
+  quiz = null; boss = { qs, i: 0, hp: 100, me: 3, combo: 0, locked: false, over: null };
+  show('study');
+}
+function endBoss(kind) { // 'win' | 'lose' | 'flee'
+  boss.over = kind;
+  const first = kind === 'win' && S.boss.lastWin !== todayKey();
+  if (kind === 'win') {
+    if (first) { S.boss.lastWin = todayKey(); S.boss.wins++; }
+    save(); checkQuests();
+    addXP(first ? 150 : 25);
+    confetti(200); buzz([50, 40, 50, 40, 120]);
+  } else addXP(kind === 'flee' ? 30 : 10);
+  renderBoss(kind === 'win' && first);
+}
+function renderBoss(firstWin) {
+  const body = $('#studyBody');
+  const [bem, bname] = bossOfDay();
+  if (boss.over) {
+    const kind = boss.over;
+    $('#qfill').style.width = '100%';
+    const msg = kind === 'win'
+      ? { e: '🏆', h: `${bname} повержен!`, t: firstWin ? 'Ты забрал(а) +150 XP. Завтра придёт новый босс.' : 'Реванш засчитан: +25 XP. Награда дня уже получена.' }
+      : kind === 'lose'
+        ? { e: '😵', h: 'Поражение…', t: 'Босс оказался сильнее. Повтори карточки — и приходи на реванш!' }
+        : { e: '💨', h: `${bname} сбежал`, t: `У босса оставалось ${boss.hp} HP. Ещё чуть-чуть! +30 XP за смелость.` };
+    body.innerHTML = `<div class="panel done">
+      <div class="big">${msg.e}</div><h2>${msg.h}</h2>
+      <div class="mut sm" style="margin:8px 0 18px">${msg.t}</div>
+      <div class="row" style="justify-content:center;gap:9px">
+        <button class="btn ghost" id="bossAgain">⚔️ Реванш</button>
+        <button class="btn" id="bossHome">На главную</button>
+      </div></div>`;
+    $('#bossAgain').onclick = () => { boss = null; startBoss(); };
+    $('#bossHome').onclick = () => { boss = null; show('home'); };
+    return;
+  }
+  const q = boss.qs[boss.i];
+  $('#qfill').style.width = (boss.i / boss.qs.length * 100) + '%';
+  body.innerHTML = `
+    <div class="panel" id="bossCard" style="position:relative">
+      <div class="row">
+        <div class="bface" style="font-size:42px">${bem}</div>
+        <div class="grow"><b>${bname}</b>
+          <div class="hpbar" style="margin-top:6px"><i style="width:${boss.hp}%"></i></div>
+          <div class="row sm" style="margin-top:5px">
+            <span class="grow hearts">${'❤️'.repeat(boss.me)}${'🖤'.repeat(3 - boss.me)}</span>
+            ${boss.combo > 1 ? `<span class="combo">×${boss.combo} комбо 🔥</span>` : `<span class="mut">${boss.i + 1}/${boss.qs.length}</span>`}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="font-weight:700;font-size:16.5px">${esc(q.q)}</div>
+    <div id="opts">${q.opts.map((o, i) => `<button class="opt" data-i="${i}">${esc(o)}</button>`).join('')}</div>`;
+  $$('#opts .opt').forEach(b => b.onclick = () => {
+    if (boss.locked) return; boss.locked = true;
+    const pick = q.opts[+b.dataset.i], right = pick === q.a;
+    const bc = $('#bossCard');
+    if (right) {
+      let dmg = Math.min(20, 10 + 2 * boss.combo);
+      const crit = Math.random() < .15;
+      if (crit) dmg *= 2;
+      boss.hp = Math.max(0, boss.hp - dmg); boss.combo++;
+      b.classList.add('ok'); buzz(crit ? [20, 30, 40] : 15);
+      bc.querySelector('.hpbar i').style.width = boss.hp + '%';
+      const f = document.createElement('span');
+      f.className = 'dmgfloat' + (crit ? ' crit' : '');
+      f.textContent = (crit ? '💥 ' : '−') + dmg;
+      f.style.left = (60 + Math.random() * 120) + 'px'; f.style.top = '18px';
+      bc.appendChild(f); setTimeout(() => f.remove(), 900);
+    } else {
+      boss.me--; boss.combo = 0;
+      b.classList.add('no');
+      $$('#opts .opt').forEach(x => { if (q.opts[+x.dataset.i] === q.a) x.classList.add('ok'); });
+      bc.classList.add('shake'); buzz([10, 40, 10, 40]);
+    }
+    setTimeout(() => {
+      boss.locked = false; boss.i++;
+      if (boss.hp <= 0) return endBoss('win');
+      if (boss.me <= 0) return endBoss('lose');
+      if (boss.i >= boss.qs.length) return endBoss('flee');
+      renderBoss();
+    }, right ? 600 : 1300);
+  });
+}
+function renderBossPanel() {
+  const box = $('#bossPanel'); if (!box) return;
+  const [bem, bname] = bossOfDay();
+  const won = S.boss.lastWin === todayKey();
+  box.innerHTML = `<div class="row">
+    <div class="${won ? '' : 'bface'}" style="font-size:36px">${won ? '🏆' : bem}</div>
+    <div class="grow"><h2>Босс дня: ${bname}</h2>
+      <div class="mut sm">${won ? 'Побеждён! Реванш — без награды, чисто размяться.' : '12 вопросов · 3 жизни · комбо и криты. Победа: +150 XP'}</div></div>
+    <button class="btn small ${won ? 'ghost' : ''}" id="bossGo">⚔️ В бой</button></div>`;
+  $('#bossGo').onclick = startBoss;
+}
+
+/* ============================================================
+   GARDEN — сад знаний (визуализация кривой забывания)
+   ============================================================ */
+function treeSVG(h) { // h: null (нет изученных) | 0..1 прочность памяти
+  if (h === null) return `<svg viewBox="0 0 64 64" width="50" height="50">
+    <path d="M32 54 V40" stroke="#8a6a44" stroke-width="4" stroke-linecap="round"/>
+    <ellipse cx="25" cy="36" rx="8" ry="6" fill="#39c47a"/>
+    <ellipse cx="39" cy="33" rx="7" ry="5" fill="#2ea866"/></svg>`;
+  const hue = Math.round(22 + h * 110), sat = Math.round(32 + h * 38), li = Math.round(38 + h * 10);
+  const r = 9 + h * 8, droop = (1 - h) * 7;
+  const leaves = h < .35 ? `<circle cx="19" cy="${52 - droop}" r="2" fill="hsl(${hue},50%,42%)"/><circle cx="45" cy="${55 - droop}" r="2" fill="hsl(${hue},50%,38%)"/>` : '';
+  return `<svg viewBox="0 0 64 64" width="50" height="50">
+    <path d="M32 56 V28 M32 42 Q24 38 20 30 M32 37 Q40 34 45 27" stroke="#8a6a44" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <ellipse cx="20" cy="${27 + droop}" rx="${r}" ry="${r * .8}" fill="hsl(${hue},${sat}%,${li}%)"/>
+    <ellipse cx="44" cy="${25 + droop}" rx="${r * .9}" ry="${r * .75}" fill="hsl(${hue},${sat}%,${li - 6}%)"/>
+    <ellipse cx="32" cy="${17 + droop}" rx="${r}" ry="${r * .85}" fill="hsl(${hue},${sat}%,${li + 4}%)"/>
+    ${leaves}</svg>`;
+}
+function renderGarden() {
+  const panel = $('#gardenPanel'), box = $('#trees');
+  if (!panel) return;
+  if (!S.decks.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  box.innerHTML = S.decks.map(d => {
+    const h = deckMemory(d);
+    const seen = d.cards.some(c => c.seen);
+    const hv = seen ? h : null;
+    return `<div class="tree" data-id="${d.id}" title="${esc(d.name)}">
+      ${treeSVG(hv)}
+      <div class="pct">${esc(d.emoji)} ${hv === null ? 'росток' : Math.round(hv * 100) + '%'}</div>
+    </div>`;
+  }).join('');
+  $$('.tree').forEach(el => el.onclick = () => {
+    const id = el.dataset.id;
+    if (dueCards(id).length) { quiz = null; boss = null; startStudy(id); show('study'); toast('💧 Поливаем повторением'); }
+    else openDeck(id);
+  });
+}
+
+/* ============================================================
+   SHARE — колода одной ссылкой (без сервера)
+   ============================================================ */
+function b64enc(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64dec(str) {
+  const bin = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(bin, ch => ch.charCodeAt(0));
+}
+async function deckLink(d) {
+  const payload = JSON.stringify({ n: d.name, e: d.emoji, c: d.cards.map(c => c.type === 'cloze' ? { t: c.text, i: c.idx } : { f: c.front, b: c.back }) });
+  const bytes = new TextEncoder().encode(payload);
+  let mark = 'j', out = bytes;
+  if (window.CompressionStream) {
+    out = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+    mark = 'z';
+  }
+  return location.href.split('#')[0] + '#d=' + mark + ':' + b64enc(out);
+}
+async function importFromHash() {
+  if (!location.hash.startsWith('#d=')) return;
+  const raw = location.hash.slice(3);
+  history.replaceState(null, '', location.pathname + location.search);
+  try {
+    const sep = raw.indexOf(':');
+    const mark = raw.slice(0, sep), b64 = raw.slice(sep + 1);
+    const bin = b64dec(b64);
+    const json = mark === 'z'
+      ? await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text()
+      : new TextDecoder().decode(bin);
+    const data = JSON.parse(json);
+    const cards = (data.c || []).map(c => {
+      if (!c) return null;
+      if (c.t) return newCloze(String(c.t).slice(0, 4000), Math.max(0, c.i | 0));
+      if (c.f && c.b) return newCard(String(c.f).slice(0, 2000), String(c.b).slice(0, 2000));
+      return null;
+    }).filter(Boolean);
+    if (!cards.length) throw 0;
+    if (confirm(`Добавить колоду «${data.n || 'Импорт'}» (карточек: ${cards.length})?`)) {
+      S.decks.push({ id: uid(), name: String(data.n || 'Импорт').slice(0, 40), emoji: String(data.e || '📦').slice(0, 4), cards });
+      save(); renderHome(); confetti(80); toast('🔗 Колода из ссылки добавлена');
+    }
+  } catch (e) { toast('Не удалось открыть ссылку с колодой 😕'); }
+}
+addEventListener('hashchange', importFromHash);
+
+/* ============================================================
+   TTS — озвучка карточек
+   ============================================================ */
+function speak(txt) {
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(txt);
+    u.lang = /[a-zA-Z]/.test(txt) && !/[а-яА-ЯёЁ]/.test(txt) ? 'en-US' : 'ru-RU';
+    u.rate = .95;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
 
 /* ============================================================
    DECKS
@@ -985,6 +1242,7 @@ function openDeck(id) {
     <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn small grow" id="cAdd">+ Карточка</button>
       <button class="btn small ghost" id="cBulk">📋 Из текста</button>
+      <button class="btn small ghost" id="dShare">🔗 Ссылка</button>
       <button class="btn small ghost" id="dExport">Экспорт</button>
     </div>
     <div id="cardList">${d.cards.length ? d.cards.map(c => {
@@ -1000,6 +1258,12 @@ function openDeck(id) {
   $('#dEdit').onclick = () => deckForm(d);
   $('#cAdd').onclick = () => cardForm(d);
   $('#cBulk').onclick = () => bulkForm(d);
+  $('#dShare').onclick = async () => {
+    if (!d.cards.length) return toast('В колоде пока нет карточек');
+    const link = await deckLink(d);
+    try { await navigator.clipboard.writeText(link); toast('🔗 Ссылка скопирована — отправь другу!'); }
+    catch (e) { prompt('Скопируй ссылку на колоду:', link); }
+  };
   $('#dExport').onclick = () => {
     const blob = new Blob([JSON.stringify({ name: d.name, emoji: d.emoji, cards: d.cards.map(c => c.type === 'cloze' ? { type: 'cloze', text: c.text, idx: c.idx } : { front: c.front, back: c.back }) }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -1194,23 +1458,31 @@ function beep() {
   } catch (e) {}
 }
 
-/* ---------- фоновые звуки: синтез шума, без аудиофайлов ---------- */
+/* ---------- фоновые звуки: аккуратный синтез, без аудиофайлов ----------
+   Ливень  = розовый шум (фильтр Пола Келлета) + мягкие капли
+   Прибой  = коричневый шум с медленными накатами громкости и тембра
+   Гул     = тёплый дрон из расстроенных осцилляторов — для глубокого фокуса */
 const snd = { type: null, nodes: [], timers: [], gain: null };
-function noiseBuffer(ac, brown) {
-  const len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate);
+function noiseBuffer(ac, kind) { // 'white' | 'pink' | 'brown'
+  const len = ac.sampleRate * 3, buf = ac.createBuffer(1, len, ac.sampleRate);
   const d = buf.getChannelData(0);
-  let lastOut = 0;
+  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, last = 0;
   for (let i = 0; i < len; i++) {
-    const white = Math.random() * 2 - 1;
-    if (brown) { lastOut = (lastOut + .02 * white) / 1.02; d[i] = lastOut * 3.5; }
-    else d[i] = white;
+    const w = Math.random() * 2 - 1;
+    if (kind === 'brown') { last = (last + .02 * w) / 1.02; d[i] = last * 3.5; }
+    else if (kind === 'pink') {
+      b0 = .99886 * b0 + w * .0555179; b1 = .99332 * b1 + w * .0750759; b2 = .969 * b2 + w * .153852;
+      b3 = .8665 * b3 + w * .3104856; b4 = .55 * b4 + w * .5329522; b5 = -.7616 * b5 - w * .016898;
+      d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * .5362) * .11;
+      b6 = w * .115926;
+    } else d[i] = w;
   }
   return buf;
 }
 function stopSound() {
-  snd.nodes.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} });
+  snd.nodes.forEach(n => { try { if (n.stop) n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} });
   snd.timers.forEach(clearInterval);
-  snd.nodes = []; snd.timers = []; snd.type = null;
+  snd.nodes = []; snd.timers = []; snd.type = null; snd.gain = null;
   $$('.sndbtn').forEach(b => b.classList.remove('on'));
 }
 function playSound(type) {
@@ -1219,58 +1491,80 @@ function playSound(type) {
   try {
     const ac = getAC();
     const master = ac.createGain();
-    master.gain.value = (+$('#sndVol').value / 100) * .5;
+    master.gain.value = (+$('#sndVol').value / 100) * .55;
     master.connect(ac.destination);
     snd.gain = master; snd.nodes.push(master);
-    const mk = (brown, freq, q) => {
+    const noiseSrc = kind => {
       const src = ac.createBufferSource();
-      src.buffer = noiseBuffer(ac, brown); src.loop = true;
-      const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq; f.Q.value = q || .7;
-      src.connect(f); f.connect(master); src.start();
-      snd.nodes.push(src, f);
+      src.buffer = noiseBuffer(ac, kind); src.loop = true;
+      snd.nodes.push(src);
+      return src;
+    };
+    const filt = (type2, freq, q) => {
+      const f = ac.createBiquadFilter();
+      f.type = type2; f.frequency.value = freq; if (q) f.Q.value = q;
+      snd.nodes.push(f);
       return f;
     };
     if (type === 'rain') {
-      mk(false, 1400);
-      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 400;
-      // редкие «капли»: короткие всплески высокочастотного шума
+      // основа: розовый шум, скруглённый сверху и снизу — ровный шелест ливня
+      const src = noiseSrc('pink');
+      const lp = filt('lowpass', 5500), hp = filt('highpass', 250);
+      const g = ac.createGain(); g.gain.value = .9; snd.nodes.push(g);
+      src.connect(hp); hp.connect(lp); lp.connect(g); g.connect(master); src.start();
+      // редкие тихие капли
       snd.timers.push(setInterval(() => {
-        if (Math.random() < .6) return;
-        const s = ac.createBufferSource(); s.buffer = noiseBuffer(ac, false);
-        const g = ac.createGain(), bp = ac.createBiquadFilter();
-        bp.type = 'bandpass'; bp.frequency.value = 2500 + Math.random() * 3000; bp.Q.value = 8;
-        g.gain.setValueAtTime(.12, ac.currentTime);
-        g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .12);
-        s.connect(bp); bp.connect(g); g.connect(master);
-        s.start(); s.stop(ac.currentTime + .15);
-      }, 350));
-    } else if (type === 'ocean') {
-      const f = mk(true, 600);
-      const lfo = ac.createOscillator(), lg = ac.createGain();
-      lfo.frequency.value = .09; lg.gain.value = 350;
-      lfo.connect(lg); lg.connect(f.frequency); lfo.start();
-      snd.nodes.push(lfo, lg);
-    } else if (type === 'fire') {
-      mk(true, 900);
-      // потрескивание
-      snd.timers.push(setInterval(() => {
-        if (Math.random() < .45) return;
-        const s = ac.createBufferSource(); s.buffer = noiseBuffer(ac, false);
-        const g = ac.createGain(), bp = ac.createBiquadFilter();
-        bp.type = 'bandpass'; bp.frequency.value = 900 + Math.random() * 1800; bp.Q.value = 12;
-        g.gain.setValueAtTime(.001, ac.currentTime);
-        g.gain.exponentialRampToValueAtTime(.2, ac.currentTime + .015);
-        g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .09);
-        s.connect(bp); bp.connect(g); g.connect(master);
-        s.start(); s.stop(ac.currentTime + .12);
-      }, 180));
+        if (Math.random() < .55) return;
+        const s = ac.createBufferSource(); s.buffer = noiseBuffer(ac, 'white');
+        const bp = filt('bandpass', 3200 + Math.random() * 2600, 10);
+        const dg = ac.createGain();
+        dg.gain.setValueAtTime(.05 + Math.random() * .04, ac.currentTime);
+        dg.gain.exponentialRampToValueAtTime(.0005, ac.currentTime + .09);
+        s.connect(bp); bp.connect(dg); dg.connect(master);
+        s.start(); s.stop(ac.currentTime + .1);
+      }, 300));
+    } else if (type === 'surf') {
+      // коричневый шум + медленные накаты: громкость и яркость дышат вместе
+      const src = noiseSrc('brown');
+      const lp = filt('lowpass', 480);
+      const swell = ac.createGain(); swell.gain.value = .55; snd.nodes.push(swell);
+      src.connect(lp); lp.connect(swell); swell.connect(master); src.start();
+      const lfo = ac.createOscillator(); lfo.frequency.value = .07;
+      const lgA = ac.createGain(); lgA.gain.value = .4;    // глубина наката громкости
+      const lgF = ac.createGain(); lgF.gain.value = 260;   // и тембра
+      lfo.connect(lgA); lgA.connect(swell.gain);
+      lfo.connect(lgF); lgF.connect(lp.frequency);
+      lfo.start(); snd.nodes.push(lfo, lgA, lgF);
+      // лёгкая пена сверху
+      const foam = noiseSrc('pink');
+      const fp = filt('highpass', 1200);
+      const fg = ac.createGain(); fg.gain.value = .06; snd.nodes.push(fg);
+      foam.connect(fp); fp.connect(fg); fg.connect(master); foam.start();
+    } else if (type === 'drone') {
+      // тёплый расстроенный дрон + низкий суб-тон + подушка розового шума
+      const mkOsc = (freq, typ, vol) => {
+        const o = ac.createOscillator(), og = ac.createGain();
+        o.type = typ; o.frequency.value = freq; og.gain.value = vol;
+        o.connect(og); return { o, og };
+      };
+      const lp = filt('lowpass', 420);
+      const bus = ac.createGain(); bus.gain.value = .3; snd.nodes.push(bus);
+      [[110, 'triangle', .5], [110.7, 'triangle', .45], [220.3, 'sine', .12], [55, 'sine', .4]].forEach(([f, t, v]) => {
+        const { o, og } = mkOsc(f, t, v);
+        og.connect(lp); o.start(); snd.nodes.push(o, og);
+      });
+      lp.connect(bus); bus.connect(master);
+      const bed = noiseSrc('pink');
+      const bp = filt('lowpass', 800);
+      const bg = ac.createGain(); bg.gain.value = .05; snd.nodes.push(bg);
+      bed.connect(bp); bp.connect(bg); bg.connect(master); bed.start();
     }
     snd.type = type;
     $$('.sndbtn').forEach(b => b.classList.toggle('on', b.dataset.s === type));
   } catch (e) { toast('Звук недоступен в этом браузере'); }
 }
 $$('.sndbtn').forEach(b => b.onclick = () => playSound(b.dataset.s));
-$('#sndVol').oninput = () => { if (snd.gain) snd.gain.gain.value = (+$('#sndVol').value / 100) * .5; };
+$('#sndVol').oninput = () => { if (snd.gain) snd.gain.gain.value = (+$('#sndVol').value / 100) * .55; };
 
 /* ============================================================
    STATS / HOME
@@ -1311,6 +1605,8 @@ function renderHome() {
   $('#stCards').textContent = allCards().length;
   renderPet();
   renderQuests();
+  renderBossPanel();
+  renderGarden();
 }
 function renderStats() {
   const heat = $('#heat');
@@ -1339,6 +1635,8 @@ function renderStats() {
   $('#s2Xp').textContent = S.xp;
   const mem = totalMemory();
   $('#s2Mem').textContent = mem !== null ? Math.round(mem * 100) + '%' : '—';
+  $('#s2Boss').textContent = S.boss.wins;
+  $('#s2Lvl').textContent = lvlOf(S.xp);
 }
 
 /* ============================================================
@@ -1533,8 +1831,9 @@ $('#setBtn').onclick = () => {
 /* ---------- boot ---------- */
 renderHome(); renderTomatoes(); drawDial();
 show('home');
+importFromHash();
 cloudInit();
-console.log('%c🧠 Cortex v2 — учись умно, а не долго', 'font-size:14px;color:#7c6cff;font-weight:bold');
+console.log('%c🧠 Cortex v3 — учись умно, а не долго', 'font-size:14px;color:#7c6cff;font-weight:bold');
 </script>
 </body>
 </html>
