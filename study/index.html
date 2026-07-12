@@ -10,29 +10,35 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
 :root{
-  --bg:#0b0d12; --bg2:#11141c; --card:#171b26; --card2:#1e2330;
-  --txt:#eef1f8; --mut:#8b93a7; --line:#262c3b;
-  --acc:#7c6cff; --acc2:#00d3a7; --warn:#ffb454; --bad:#ff6478;
-  --ring:rgba(124,108,255,.35);
-  --r:18px; --r-s:12px;
-  --shadow:0 10px 30px rgba(0,0,0,.35);
+  --bg:#04050b; --bg2:#0a0d1a;
+  --card:rgba(17,21,40,.78); --card2:rgba(30,36,62,.55);
+  --txt:#e9ecf9; --mut:#828aa8; --line:rgba(145,155,210,.15);
+  --acc:#8b7bff; --acc2:#25e3b4; --warn:#ffb454; --bad:#ff6478;
+  --ring:rgba(139,123,255,.35);
+  --r:20px; --r-s:13px;
+  --shadow:0 14px 38px rgba(0,0,0,.45);
 }
 html.light{
-  --bg:#f2f3f8; --bg2:#ffffff; --card:#ffffff; --card2:#f5f6fb;
-  --txt:#171a22; --mut:#697084; --line:#e4e7f0;
-  --shadow:0 10px 24px rgba(23,26,34,.08);
-  --ring:rgba(124,108,255,.22);
+  --bg:#eef0f8; --bg2:#ffffff;
+  --card:rgba(255,255,255,.85); --card2:rgba(238,240,250,.9);
+  --txt:#171a26; --mut:#68708c; --line:rgba(60,70,120,.13);
+  --shadow:0 10px 26px rgba(23,26,40,.09);
+  --ring:rgba(139,123,255,.22);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{
   font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
   background:var(--bg); color:var(--txt);
-  background-image:radial-gradient(1200px 500px at 80% -10%, rgba(124,108,255,.14), transparent 60%),
-                   radial-gradient(900px 420px at -10% 0%, rgba(0,211,167,.10), transparent 55%);
+  background-image:
+    radial-gradient(1100px 520px at 85% -12%, rgba(139,123,255,.16), transparent 60%),
+    radial-gradient(800px 400px at -12% 4%, rgba(37,227,180,.09), transparent 55%),
+    radial-gradient(600px 600px at 50% 110%, rgba(80,60,200,.12), transparent 60%);
+  background-attachment:fixed;
   min-height:100dvh; padding-bottom:calc(76px + env(safe-area-inset-bottom));
   user-select:none;
 }
+html.light body{background-image:radial-gradient(1100px 520px at 85% -12%, rgba(139,123,255,.10), transparent 60%),radial-gradient(800px 400px at -12% 4%, rgba(37,227,180,.08), transparent 55%)}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 input,textarea,select{font:inherit;color:var(--txt)}
 .wrap{max-width:560px;margin:0 auto;padding:18px 16px 8px}
@@ -64,7 +70,10 @@ nav.tabs button.on .ico{transform:translateY(-2px) scale(1.12)}
 @keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
 /* ---- cards / ui ---- */
-.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;box-shadow:var(--shadow);margin-bottom:12px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;box-shadow:var(--shadow);margin-bottom:12px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.panel{background-clip:padding-box}
+nav.tabs .ni{width:23px;height:23px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s}
+nav.tabs button.on .ni{transform:translateY(-2px) scale(1.12)}
 .row{display:flex;align-items:center;gap:10px}
 .grow{flex:1}
 .mut{color:var(--mut)} .sm{font-size:12.5px}
@@ -229,11 +238,11 @@ input[type=range]{accent-color:var(--acc);width:110px}
 .dmgfloat.crit{color:#ffd76a;font-size:27px}
 @keyframes dmg{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(-48px) scale(1.35)}}
 
-/* ---- garden ---- */
-.trees{display:flex;gap:7px;overflow-x:auto;padding:4px 0}
-.tree{flex:none;width:76px;text-align:center;cursor:pointer;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:8px 4px 6px;transition:transform .12s}
-.tree:active{transform:scale(.94)}
-.tree .pct{font-size:11px;font-weight:700;color:var(--mut)}
+/* ---- universe ---- */
+#uni{cursor:pointer}
+#uniPanel{background:linear-gradient(180deg,rgba(8,10,22,.92),rgba(12,15,30,.85))}
+html.light #uniPanel{background:linear-gradient(180deg,#141830,#1b2040)}
+html.light #uniHint{color:#9aa2c4}
 
 .spk{position:absolute;top:9px;right:11px;font-size:17px;opacity:.65;z-index:2;padding:4px}
 
@@ -290,13 +299,12 @@ input[type=range]{accent-color:var(--acc);width:110px}
     </div>
     <div class="bubble" id="petSay" style="margin:-4px 0 12px"></div>
 
-    <div class="panel" id="bossPanel"></div>
-
-    <div class="panel" id="gardenPanel">
-      <h2 style="margin-bottom:2px">Сад знаний</h2>
-      <div class="sm mut" style="margin-bottom:6px">Каждая колода — дерево. Память тает — оно вянет. Тапни, чтобы полить повторением.</div>
-      <div class="trees" id="trees"></div>
+    <div class="panel" id="uniPanel" style="padding:0;overflow:hidden">
+      <canvas id="uni" style="display:block;width:100%;height:252px"></canvas>
+      <div class="sm mut" style="padding:9px 14px;border-top:1px solid var(--line)" id="uniHint">Вселенная памяти: каждая карточка — звезда, она гаснет по кривой забывания. Тапни созвездие, чтобы зажечь его заново.</div>
     </div>
+
+    <div class="panel" id="bossPanel"></div>
 
     <div class="panel" id="questPanel">
       <div class="row" style="margin-bottom:6px">
@@ -417,11 +425,11 @@ input[type=range]{accent-color:var(--acc);width:110px}
 </div>
 
 <nav class="tabs">
-  <button data-p="home" class="on"><span class="ico">🏠</span>Главная</button>
-  <button data-p="study"><span class="ico">🧠</span>Учить</button>
-  <button data-p="decks"><span class="ico">🃏</span>Колоды</button>
-  <button data-p="focus"><span class="ico">🍅</span>Фокус</button>
-  <button data-p="stats"><span class="ico">📈</span>Статы</button>
+  <button data-p="home" class="on"><svg class="ni" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.6"/><path d="M3.5 15.5 C7 12.6 17 6.4 20.8 8.6 M3.2 8.4 C7 10.8 17.2 17.2 20.6 15.6" opacity=".65"/></svg>Главная</button>
+  <button data-p="study"><svg class="ni" viewBox="0 0 24 24"><path d="M13 2 L6 13 h5 l-1 9 8 -12 h-5 z"/></svg>Учить</button>
+  <button data-p="decks"><svg class="ni" viewBox="0 0 24 24"><rect x="6.5" y="3" width="13" height="16" rx="2.5" transform="rotate(6 13 11)"/><rect x="4" y="5" width="13" height="16" rx="2.5"/></svg>Колоды</button>
+  <button data-p="focus"><svg class="ni" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5 V13 l2.6 2"/><path d="M9.5 2.5 h5"/></svg>Фокус</button>
+  <button data-p="stats"><svg class="ni" viewBox="0 0 24 24"><path d="M3.5 20.5 h17"/><path d="M5.5 16.5 l4.4-5 3.4 3 5.4-7.5"/><circle cx="18.7" cy="7" r="1.4"/></svg>Статы</button>
 </nav>
 
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
@@ -783,6 +791,8 @@ function petSVG(lvl, mood) {
     ${eyes}${blush}
     <path d="${mouth}" stroke="#2b2350" stroke-width="3.5" fill="none" stroke-linecap="round"/>
     ${glasses}${cap}${crown}${zzz}
+    <ellipse cx="60" cy="61" rx="53" ry="50" fill="rgba(160,200,255,.07)" stroke="rgba(190,220,255,.38)" stroke-width="1.6"/>
+    <path d="M26 38 Q34 24 48 19" stroke="rgba(255,255,255,.5)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
   </svg>`;
 }
 function renderPet() {
@@ -1152,43 +1162,137 @@ function renderBossPanel() {
 }
 
 /* ============================================================
-   GARDEN — сад знаний (визуализация кривой забывания)
+   UNIVERSE — вселенная памяти (живая карта забывания на canvas)
+   Каждая карточка — звезда: яркость = прочность памяти.
+   Колода — созвездие. Тап по созвездию — повторение этой колоды.
    ============================================================ */
-function treeSVG(h) { // h: null (нет изученных) | 0..1 прочность памяти
-  if (h === null) return `<svg viewBox="0 0 64 64" width="50" height="50">
-    <path d="M32 54 V40" stroke="#8a6a44" stroke-width="4" stroke-linecap="round"/>
-    <ellipse cx="25" cy="36" rx="8" ry="6" fill="#39c47a"/>
-    <ellipse cx="39" cy="33" rx="7" ry="5" fill="#2ea866"/></svg>`;
-  const hue = Math.round(22 + h * 110), sat = Math.round(32 + h * 38), li = Math.round(38 + h * 10);
-  const r = 9 + h * 8, droop = (1 - h) * 7;
-  const leaves = h < .35 ? `<circle cx="19" cy="${52 - droop}" r="2" fill="hsl(${hue},50%,42%)"/><circle cx="45" cy="${55 - droop}" r="2" fill="hsl(${hue},50%,38%)"/>` : '';
-  return `<svg viewBox="0 0 64 64" width="50" height="50">
-    <path d="M32 56 V28 M32 42 Q24 38 20 30 M32 37 Q40 34 45 27" stroke="#8a6a44" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <ellipse cx="20" cy="${27 + droop}" rx="${r}" ry="${r * .8}" fill="hsl(${hue},${sat}%,${li}%)"/>
-    <ellipse cx="44" cy="${25 + droop}" rx="${r * .9}" ry="${r * .75}" fill="hsl(${hue},${sat}%,${li - 6}%)"/>
-    <ellipse cx="32" cy="${17 + droop}" rx="${r}" ry="${r * .85}" fill="hsl(${hue},${sat}%,${li + 4}%)"/>
-    ${leaves}</svg>`;
+const uni = { raf: null, stars: [], decksPos: [], W: 0, H: 0 };
+function hash32(str) {
+  let h = 2166136261;
+  for (const ch of String(str)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  return h >>> 0;
 }
-function renderGarden() {
-  const panel = $('#gardenPanel'), box = $('#trees');
-  if (!panel) return;
-  if (!S.decks.length) { panel.style.display = 'none'; return; }
-  panel.style.display = '';
-  box.innerHTML = S.decks.map(d => {
-    const h = deckMemory(d);
-    const seen = d.cards.some(c => c.seen);
-    const hv = seen ? h : null;
-    return `<div class="tree" data-id="${d.id}" title="${esc(d.name)}">
-      ${treeSVG(hv)}
-      <div class="pct">${esc(d.emoji)} ${hv === null ? 'росток' : Math.round(hv * 100) + '%'}</div>
-    </div>`;
-  }).join('');
-  $$('.tree').forEach(el => el.onclick = () => {
-    const id = el.dataset.id;
-    if (dueCards(id).length) { quiz = null; boss = null; startStudy(id); show('study'); toast('💧 Поливаем повторением'); }
-    else openDeck(id);
+function rand01(seed) { // mulberry32, один шаг — детерминированные позиции звёзд
+  let t = (seed + 0x6D2B79F5) | 0;
+  t = Math.imul(t ^ t >>> 15, t | 1);
+  t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+}
+function buildUniverse() {
+  const cv = $('#uni'); if (!cv) return;
+  const rect = cv.getBoundingClientRect();
+  if (!rect.width) return;
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  uni.W = rect.width; uni.H = rect.height;
+  cv.width = rect.width * dpr; cv.height = rect.height * dpr;
+  cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+  uni.decksPos = []; uni.stars = [];
+  const n = S.decks.length;
+  S.decks.forEach((d, i) => {
+    const ga = i * 2.399963; // золотой угол — равномерная спираль созвездий
+    const rr = n === 1 ? 0 : Math.min(uni.W, uni.H) * .3 * Math.sqrt((i + .6) / n);
+    const cx = uni.W / 2 + Math.cos(ga) * rr * 1.5;
+    const cy = uni.H / 2 - 10 + Math.sin(ga) * rr * .85;
+    const chain = [];
+    d.cards.slice(0, 48).forEach(c => {
+      const h = hash32(c.id);
+      const a = rand01(h) * Math.PI * 2, dist = 7 + rand01(h ^ 0xabc) * 40;
+      const R = retention(c);
+      const st = {
+        x: cx + Math.cos(a) * dist * 1.3, y: cy + Math.sin(a) * dist * .75,
+        r: c.seen ? (R !== null ? .9 + R * 1.7 : 1.3) : 1.5,
+        b: c.seen ? (R === null ? .4 : .22 + R * .78) : .85,
+        hue: c.seen ? (R !== null && R < .35 ? 10 : 252) : 165, // забытая — красная, новая — бирюзовая
+        ph: rand01(h ^ 0x123) * 6.28, sp: .5 + rand01(h ^ 0x321) * 1.3,
+      };
+      uni.stars.push(st); chain.push(st);
+    });
+    chain.sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
+    uni.decksPos.push({ d, cx, cy, chain: chain.slice(0, 9) });
   });
+  for (let i = 0; i < 90; i++) { // далёкая пыль
+    const h = hash32('dust' + i);
+    uni.stars.push({ x: rand01(h) * uni.W, y: rand01(h ^ 1) * uni.H, r: .55, b: .09 + rand01(h ^ 2) * .13, hue: 230, ph: rand01(h ^ 3) * 6.28, sp: .3, dust: 1 });
+  }
 }
+function drawUniverse(t) {
+  const cv = $('#uni');
+  if (!cv || !$('#page-home').classList.contains('on') || document.hidden) { uni.raf = null; return; }
+  const g = cv.getContext('2d');
+  g.clearRect(0, 0, uni.W, uni.H);
+  // туманности
+  const neb = g.createRadialGradient(uni.W * .78, uni.H * .2, 10, uni.W * .78, uni.H * .2, uni.W * .5);
+  neb.addColorStop(0, 'rgba(139,123,255,.10)'); neb.addColorStop(1, 'transparent');
+  g.fillStyle = neb; g.fillRect(0, 0, uni.W, uni.H);
+  const neb2 = g.createRadialGradient(uni.W * .15, uni.H * .85, 10, uni.W * .15, uni.H * .85, uni.W * .45);
+  neb2.addColorStop(0, 'rgba(37,227,180,.07)'); neb2.addColorStop(1, 'transparent');
+  g.fillStyle = neb2; g.fillRect(0, 0, uni.W, uni.H);
+  // линии созвездий
+  g.lineWidth = 1;
+  for (const p of uni.decksPos) {
+    if (p.chain.length < 2) continue;
+    g.strokeStyle = 'rgba(150,160,220,.13)';
+    g.beginPath();
+    g.moveTo(p.chain[0].x, p.chain[0].y);
+    for (let i = 1; i < p.chain.length; i++) g.lineTo(p.chain[i].x, p.chain[i].y);
+    g.stroke();
+  }
+  // звёзды
+  for (const s of uni.stars) {
+    const tw = 1 + Math.sin(t / 900 * s.sp + s.ph) * .28;
+    const a = Math.max(0, Math.min(1, s.b * tw));
+    g.beginPath();
+    g.fillStyle = `hsla(${s.hue},85%,76%,${a})`;
+    g.arc(s.x, s.y, s.r, 0, 7);
+    g.fill();
+    if (!s.dust && s.b > .65) { // блик у ярких
+      g.strokeStyle = `hsla(${s.hue},85%,80%,${a * .4})`;
+      g.lineWidth = .7;
+      g.beginPath();
+      g.moveTo(s.x - s.r * 3, s.y); g.lineTo(s.x + s.r * 3, s.y);
+      g.moveTo(s.x, s.y - s.r * 3); g.lineTo(s.x, s.y + s.r * 3);
+      g.stroke();
+    }
+  }
+  // подписи созвездий
+  g.textAlign = 'center';
+  for (const p of uni.decksPos) {
+    const mem = deckMemory(p.d);
+    const seen = p.d.cards.some(c => c.seen);
+    g.font = '600 10.5px -apple-system, sans-serif';
+    g.fillStyle = 'rgba(190,198,230,.85)';
+    g.fillText(`${p.d.emoji} ${p.d.name.slice(0, 16)}`, p.cx, p.cy + 56);
+    g.font = '700 9.5px -apple-system, sans-serif';
+    g.fillStyle = seen && mem !== null && mem < .4 ? 'rgba(255,120,130,.9)' : 'rgba(140,150,190,.7)';
+    g.fillText(seen ? Math.round((mem || 0) * 100) + '%' : 'новое созвездие', p.cx, p.cy + 69);
+  }
+  uni.raf = requestAnimationFrame(drawUniverse);
+}
+function startUniverse() {
+  if (!S.decks.length) { const p = $('#uniPanel'); if (p) p.style.display = 'none'; return; }
+  const p = $('#uniPanel'); if (p) p.style.display = '';
+  buildUniverse();
+  if (!uni.raf) uni.raf = requestAnimationFrame(drawUniverse);
+}
+(function () {
+  const cv = $('#uni'); if (!cv) return;
+  cv.addEventListener('click', e => {
+    const r = cv.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    let best = null, bd = 1e9;
+    for (const p of uni.decksPos) {
+      const d2 = (p.cx - x) ** 2 + (p.cy - y) ** 2;
+      if (d2 < bd) { bd = d2; best = p; }
+    }
+    if (!best || bd > 80 * 80) return;
+    if (dueCards(best.d.id).length) { quiz = null; boss = null; startStudy(best.d.id); show('study'); toast('✨ Зажигаем ' + best.d.name); }
+    else openDeck(best.d.id);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && $('#page-home').classList.contains('on') && !uni.raf) uni.raf = requestAnimationFrame(drawUniverse);
+  });
+  addEventListener('resize', () => { if ($('#page-home').classList.contains('on')) buildUniverse(); });
+})();
 
 /* ============================================================
    SHARE — колода одной ссылкой (без сервера)
@@ -1779,7 +1883,7 @@ function renderHome() {
   renderPet();
   renderQuests();
   renderBossPanel();
-  renderGarden();
+  startUniverse();
 }
 function renderStats() {
   const heat = $('#heat');
@@ -2127,7 +2231,7 @@ if (!S.onboarded && !location.hash) setTimeout(() => {
       <div class="mut sm">тренажёр памяти, который хочется открывать каждый день</div>
     </div>
     <div class="quest"><div class="qi">⚔️</div><div class="grow"><div class="qt">Побеждай босса дня</div><div class="qp">его бьют твои же карточки — с комбо и критами</div></div></div>
-    <div class="quest"><div class="qi">🌳</div><div class="grow"><div class="qt">Не дай саду завянуть</div><div class="qp">деревья вянут по настоящей кривой забывания</div></div></div>
+    <div class="quest"><div class="qi">🌌</div><div class="grow"><div class="qt">Не дай звёздам погаснуть</div><div class="qp">каждая карточка — звезда, она тускнеет по кривой забывания</div></div></div>
     <div class="quest"><div class="qi">🏆</div><div class="grow"><div class="qt">Лига недели</div><div class="qp">соревнуйся в XP с другими учениками</div></div></div>
     <div class="quest"><div class="qi">📋</div><div class="grow"><div class="qt">Колода за минуту</div><div class="qp">вставь конспект «термин — определение» или сгенерируй с 🤖 AI</div></div></div>
     <button class="btn grow" id="obGo" style="margin-top:14px">Поехали! 🚀</button>`);
