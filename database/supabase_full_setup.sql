@@ -39,6 +39,7 @@ create index if not exists tracker_sessions_user_active_idx
 create or replace function public.set_tracker_sessions_updated_at()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   if new.updated_at is null then
