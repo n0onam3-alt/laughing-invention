@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#F7F7F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1116" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Tuck — a minimalist, evidence-based chin tuck and face-posture trainer.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>Tuck</title>
+<style>
+:root{
+  --bg:#F7F7F5; --card:#FFFFFF; --card2:#EFEFEC; --text:#1A1D21; --muted:#6B7280;
+  --accent:#0D9488; --accent-soft:#0D948818; --line:#E5E5E1; --danger:#DC2626;
+  --shadow:0 1px 3px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0E1116; --card:#171B21; --card2:#1F242C; --text:#ECEEF0; --muted:#8B93A0;
+    --accent:#5EEAD4; --accent-soft:#5EEAD41A; --line:#252B34; --danger:#F87171;
+    --shadow:none;
+  }
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{font-size:16px}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);color:var(--text);
+  min-height:100dvh;overscroll-behavior-y:none;
+  -webkit-font-smoothing:antialiased;
+}
+main{max-width:520px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 20px calc(96px + env(safe-area-inset-bottom))}
+h1{font-size:1.7rem;font-weight:800;letter-spacing:-.02em}
+h2{font-size:1.05rem;font-weight:700;margin:26px 0 10px}
+.sub{color:var(--muted);font-size:.9rem;margin-top:4px}
+.page{display:none}
+.page.active{display:block;animation:fade .18s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+.topbar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.iconbtn{background:var(--card);border:1px solid var(--line);color:var(--text);width:38px;height:38px;border-radius:12px;font-size:1.1rem;display:flex;align-items:center;justify-content:center;cursor:pointer}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+.card + .card{margin-top:10px}
+
+/* Today */
+.hero{display:flex;flex-direction:column;gap:14px;padding:22px 18px;text-align:center}
+.streak{font-size:.95rem;color:var(--muted)}
+.streak b{color:var(--text)}
+.donebadge{display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-weight:700;font-size:.95rem;justify-content:center}
+.bigbtn{
+  background:var(--accent);color:var(--bg);border:none;border-radius:14px;
+  padding:16px;font-size:1.05rem;font-weight:800;cursor:pointer;width:100%;
+  letter-spacing:-.01em;
+}
+.bigbtn:active{transform:scale(.985)}
+.bigbtn.secondary{background:var(--card2);color:var(--text)}
+.routine-list{display:flex;flex-direction:column}
+.routine-item{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line)}
+.routine-item:last-child{border-bottom:none}
+.routine-item .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+.routine-item .nm{font-weight:600;font-size:.95rem;flex:1}
+.routine-item .meta{color:var(--muted);font-size:.85rem;white-space:nowrap}
+.breaks{display:flex;gap:7px;justify-content:center;align-items:center;font-size:.85rem;color:var(--muted)}
+.breaks .bd{width:9px;height:9px;border-radius:50%;background:var(--card2);border:1.5px solid var(--line)}
+.breaks .bd.on{background:var(--accent);border-color:var(--accent)}
+
+/* Exercise art */
+.art{display:flex;justify-content:center;color:var(--muted)}
+.art svg{width:92px;height:92px;overflow:visible}
+.art .ln{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.art .ac{stroke:var(--accent)}
+.ex-art{margin:2px 0 10px}
+@keyframes artTuck{0%,18%{transform:translateX(-6px)}50%,72%{transform:translateX(4px)}100%{transform:translateX(-6px)}}
+@keyframes artCeil{0%,18%{transform:rotate(0deg)}50%,72%{transform:rotate(22deg)}100%{transform:rotate(0deg)}}
+@keyframes artPulse{0%,25%{transform:translateY(0);opacity:.55}55%,75%{transform:translateY(-3px);opacity:1}100%{transform:translateY(0);opacity:.55}}
+@keyframes artCheek{0%,20%{transform:translateY(0)}55%,75%{transform:translateY(-4px)}100%{transform:translateY(0)}}
+@keyframes artTilt{0%{transform:rotate(-15deg)}50%{transform:rotate(15deg)}100%{transform:rotate(-15deg)}}
+@keyframes artLift{0%,20%{transform:translateY(0) rotate(0)}50%,72%{transform:translateY(-5px) rotate(-7deg)}100%{transform:translateY(0) rotate(0)}}
+@keyframes artFade{0%,30%{opacity:0}55%,80%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.art svg *{animation:none !important}}
+
+/* Exercises */
+.ex-card{cursor:pointer}
+.ex-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.ex-title{font-weight:700;font-size:1rem}
+.ex-target{color:var(--muted);font-size:.85rem;margin-top:2px}
+.chev{color:var(--muted);transition:transform .2s}
+.ex-card.open .chev{transform:rotate(90deg)}
+.ex-body{display:none;margin-top:12px;font-size:.92rem;line-height:1.55}
+.ex-card.open .ex-body{display:block}
+.ex-body ol{padding-left:20px;display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.tag{display:inline-block;background:var(--accent-soft);color:var(--accent);font-size:.75rem;font-weight:700;padding:3px 9px;border-radius:99px;margin-top:10px}
+.evidence{color:var(--muted);font-size:.85rem;margin-top:10px;line-height:1.5}
+.caution{color:var(--danger);font-size:.85rem;margin-top:8px;line-height:1.5}
+
+/* Progress */
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 12px;text-align:center}
+.stat .v{font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
+.stat .l{color:var(--muted);font-size:.78rem;margin-top:2px}
+.cal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.cal-head b{font-size:.95rem}
+.cal-nav{display:flex;gap:6px}
+.cal-nav button{background:var(--card2);border:none;color:var(--text);width:30px;height:30px;border-radius:9px;cursor:pointer;font-size:.9rem}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center}
+.cal-grid .wd{color:var(--muted);font-size:.7rem;font-weight:600;padding-bottom:2px}
+.cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:.82rem;color:var(--muted)}
+.cal-day.done{background:var(--accent);color:var(--bg);font-weight:700}
+.cal-day.today{outline:2px solid var(--accent);outline-offset:-2px;color:var(--text);font-weight:700}
+.cal-day.today.done{color:var(--bg)}
+
+/* Learn */
+.learn p{font-size:.92rem;line-height:1.6;color:var(--text)}
+.learn p + p{margin-top:8px}
+.learn .src{color:var(--muted);font-size:.8rem;margin-top:10px;line-height:1.5}
+.disclaimer{color:var(--muted);font-size:.8rem;text-align:center;margin-top:24px;line-height:1.5}
+
+/* Tab bar */
+nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:10;
+  background:color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.tabs{max-width:520px;margin:0 auto;display:flex}
+.tab{flex:1;background:none;border:none;color:var(--muted);padding:10px 0 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.68rem;font-weight:600;font-family:inherit}
+.tab svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tab.active{color:var(--accent)}
+
+/* Player */
+#player{
+  position:fixed;inset:0;z-index:50;background:var(--bg);display:none;
+  flex-direction:column;padding:calc(16px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+}
+#player.active{display:flex}
+.p-top{display:flex;justify-content:space-between;align-items:center}
+.p-count{color:var(--muted);font-size:.9rem;font-weight:600}
+.p-mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;max-width:420px;margin:0 auto;width:100%}
+.p-exname{font-size:1.35rem;font-weight:800;letter-spacing:-.02em}
+.p-phase{font-size:.85rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.p-phase.rest{color:var(--muted)}
+.ring-wrap{position:relative;width:min(52vw,200px);aspect-ratio:1;margin:4px 0}
+.ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring-bg{stroke:var(--card2);fill:none;stroke-width:9}
+.ring-fg{stroke:var(--accent);fill:none;stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .15s linear}
+.ring-fg.rest{stroke:var(--muted)}
+.p-timer{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.p-timer .n{font-size:3.6rem;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.p-timer .r{color:var(--muted);font-size:.9rem;font-weight:600;margin-top:2px}
+.p-cue{color:var(--muted);font-size:.95rem;line-height:1.5;min-height:3em;max-width:340px}
+.p-actions{display:flex;gap:10px;max-width:420px;margin:0 auto;width:100%}
+.p-actions .bigbtn{flex:1}
+
+/* Done screen */
+.p-done{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center}
+.p-done .emoji{font-size:3.2rem}
+.p-done h2{margin:0;font-size:1.4rem}
+
+/* Settings sheet */
+#sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:60;display:none}
+#sheet-backdrop.active{display:block}
+#sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--card);
+  border-radius:20px 20px 0 0;padding:20px 20px calc(28px + env(safe-area-inset-bottom));
+  max-width:520px;margin:0 auto;transform:translateY(100%);transition:transform .25s ease;
+  max-height:82dvh;overflow-y:auto;overscroll-behavior:contain;
+}
+#sheet.active{transform:none}
+.sheet-title{font-size:1.15rem;font-weight:800;margin-bottom:16px}
+.set-row{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)}
+.set-row:last-of-type{border-bottom:none}
+.set-row .lbl{font-weight:600;font-size:.95rem}
+.seg{display:flex;background:var(--card2);border-radius:10px;padding:3px}
+.seg button{background:none;border:none;color:var(--muted);font-weight:600;font-size:.82rem;padding:6px 12px;border-radius:8px;cursor:pointer;font-family:inherit}
+.seg button.on{background:var(--card);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.switch{position:relative;width:48px;height:29px;background:var(--card2);border-radius:99px;cursor:pointer;transition:background .2s;flex:none}
+.switch.on{background:var(--accent)}
+.switch::after{content:"";position:absolute;top:2.5px;left:3px;width:24px;height:24px;background:#fff;border-radius:50%;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.switch.on::after{left:21px}
+.set-note{color:var(--muted);font-size:.78rem;line-height:1.5;padding:8px 0 2px}
+.sync-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;background:var(--card2);border-radius:10px;padding:10px 12px;word-break:break-all;margin:8px 0;user-select:all}
+.sync-row{display:flex;gap:8px;margin:8px 0}
+.sync-row input{flex:1;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--text);font-size:.85rem;font-family:inherit;min-width:0}
+.sync-row input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.minibtn{background:var(--accent-soft);color:var(--accent);border:none;border-radius:10px;padding:9px 14px;font-weight:700;font-size:.85rem;cursor:pointer;font-family:inherit;white-space:nowrap}
+.minibtn.plain{background:var(--card2);color:var(--text)}
+.reset-btn{width:100%;background:none;border:none;color:var(--danger);font-weight:700;font-size:.95rem;padding:14px 0 2px;cursor:pointer;font-family:inherit}
+
+.toast{
+  position:fixed;bottom:calc(86px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--text);color:var(--bg);padding:10px 18px;border-radius:99px;font-size:.88rem;font-weight:600;
+  opacity:0;pointer-events:none;transition:.25s;z-index:70;white-space:nowrap;
+}
+.toast.show{opacity:1;transform:translateX(-50%)}
+</style>
+</head>
+<body>
+
+<main>
+  <!-- TODAY -->
+  <section class="page active" id="page-today">
+    <div class="topbar">
+      <div>
+        <h1 id="greeting">Tuck</h1>
+        <div class="sub" id="today-date"></div>
+      </div>
+      <button class="iconbtn" id="btn-settings" aria-label="Settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+
+    <div class="card hero">
+      <div id="hero-status"></div>
+      <button class="bigbtn" id="btn-start">Start session</button>
+      <div class="sub" id="session-est"></div>
+      <button class="bigbtn secondary" id="btn-break">1-minute posture break</button>
+      <div class="breaks" id="breaks-row"></div>
+    </div>
+
+    <h2>Today's routine</h2>
+    <div class="card routine-list" id="routine-list"></div>
+  </section>
+
+  <!-- EXERCISES -->
+  <section class="page" id="page-exercises">
+    <div class="topbar"><div><h1>Exercises</h1><div class="sub">Tap any exercise to learn it properly.</div></div></div>
+    <div id="ex-list"></div>
+  </section>
+
+  <!-- PROGRESS -->
+  <section class="page" id="page-progress">
+    <div class="topbar"><div><h1>Progress</h1><div class="sub">Consistency beats intensity.</div></div></div>
+    <div class="stats" id="stats-row"></div>
+    <h2>Calendar</h2>
+    <div class="card">
+      <div class="cal-head">
+        <b id="cal-title"></b>
+        <div class="cal-nav">
+          <button id="cal-prev" aria-label="Previous month">‹</button>
+          <button id="cal-next" aria-label="Next month">›</button>
+        </div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+    <div class="stats" id="stats-row2" style="margin-top:10px"></div>
+  </section>
+
+  <!-- LEARN -->
+  <section class="page" id="page-learn">
+    <div class="topbar"><div><h1>Learn</h1><div class="sub">What the evidence actually says.</div></div></div>
+    <div id="learn-list" class="learn"></div>
+    <p class="disclaimer">Tuck is an exercise companion, not medical advice. If you have neck pain, TMJ problems, dizziness, or a recent injury, talk to a physical therapist or doctor before training. Stop any exercise that causes pain.</p>
+  </section>
+</main>
+
+<!-- TABS -->
+<nav>
+  <div class="tabs">
+    <button class="tab active" data-page="today">
+      <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/></svg>Today
+    </button>
+    <button class="tab" data-page="exercises">
+      <svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>Exercises
+    </button>
+    <button class="tab" data-page="progress">
+      <svg viewBox="0 0 24 24"><path d="M4 19.5h16"/><path d="M6.5 19.5v-6M12 19.5V9M17.5 19.5V4.5"/></svg>Progress
+    </button>
+    <button class="tab" data-page="learn">
+      <svg viewBox="0 0 24 24"><path d="M12 6.5c-1.8-1.6-4.5-2-7.5-1.5v13c3-.5 5.7-.1 7.5 1.5 1.8-1.6 4.5-2 7.5-1.5v-13c-3-.5-5.7-.1-7.5 1.5z"/><path d="M12 6.5v13"/></svg>Learn
+    </button>
+  </div>
+</nav>
+
+<!-- PLAYER -->
+<div id="player">
+  <div class="p-top">
+    <span class="p-count" id="p-count"></span>
+    <button class="iconbtn" id="p-close" aria-label="End session">✕</button>
+  </div>
+  <div class="p-mid" id="p-mid">
+    <div class="p-phase" id="p-phase"></div>
+    <div class="p-exname" id="p-exname"></div>
+    <div class="art" id="p-art"></div>
+    <div class="ring-wrap">
+      <svg viewBox="0 0 100 100">
+        <circle class="ring-bg" cx="50" cy="50" r="44"></circle>
+        <circle class="ring-fg" id="ring" cx="50" cy="50" r="44"></circle>
+      </svg>
+      <div class="p-timer">
+        <div class="n" id="p-secs">–</div>
+        <div class="r" id="p-rep"></div>
+      </div>
+    </div>
+    <div class="p-cue" id="p-cue"></div>
+  </div>
+  <div class="p-done" id="p-done" style="display:none">
+    <div class="emoji">✓</div>
+    <h2>Session complete</h2>
+    <div class="sub" id="p-done-sub"></div>
+  </div>
+  <div class="p-actions">
+    <button class="bigbtn secondary" id="p-pause">Pause</button>
+    <button class="bigbtn secondary" id="p-skip">Skip</button>
+  </div>
+</div>
+
+<!-- SETTINGS SHEET -->
+<div id="sheet-backdrop"></div>
+<div id="sheet">
+  <div class="sheet-title">Settings</div>
+  <div class="set-row">
+    <span class="lbl">Intensity</span>
+    <div class="seg" id="seg-level">
+      <button data-v="gentle">Gentle</button>
+      <button data-v="standard">Standard</button>
+      <button data-v="advanced">Advanced</button>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="lbl">Sound cues</span>
+    <div class="switch" id="sw-sound"></div>
+  </div>
+  <div class="set-row">
+    <span class="lbl">Vibration</span>
+    <div class="switch" id="sw-vibe"></div>
+  </div>
+  <div class="set-row">
+    <span class="lbl">Posture pings</span>
+    <div class="seg" id="seg-ping">
+      <button data-v="0">Off</button>
+      <button data-v="30">30m</button>
+      <button data-v="60">60m</button>
+      <button data-v="90">90m</button>
+    </div>
+  </div>
+  <div class="set-note">Pings remind you to reset your posture and fire while Tuck is open (keep the tab or installed app running). For guaranteed reminders when it's closed, set a repeating phone alarm.</div>
+  <div class="set-row" style="border-top:1px solid var(--line)">
+    <span class="lbl">Sync devices</span>
+    <div id="sync-ui-btns"></div>
+  </div>
+  <div id="sync-ui"></div>
+  <button class="reset-btn" id="btn-reset">Reset all data</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ---------------- Data ---------------- */
+
+/* Schematic exercise illustrations (inline SVG, animated) */
+const P_FACE = "M67 12 Q45 12 42 30 Q41 37 36 44 Q33 47 37 48.5 Q40 50 39 54 Q38 57 41 58 Q44 59 42.5 62 Q40.5 67 48 68.5 Q55 70 56.5 76 L57 88";
+const P_BACK = "M67 12 Q83 19 81 38 Q79.5 54 72 61 L72 88";
+const HEAD = `<path class="ln" d="${P_FACE}"/><path class="ln" d="${P_BACK}"/><circle cx="49" cy="37" r="2.4" fill="currentColor"/>`;
+const svgWrap = inner => `<svg viewBox="0 0 100 100" aria-hidden="true">${inner}</svg>`;
+
+const ART = {
+  "chin-tuck": svgWrap(`
+    <g style="animation:artTuck 2.8s ease-in-out infinite">${HEAD}</g>
+    <g style="animation:artFade 2.8s ease-in-out infinite"><path class="ln ac" d="M10 78 H26 M20 72 l7 6 -7 6"/></g>`),
+  "wall-tuck": svgWrap(`
+    <line class="ln" x1="88" y1="6" x2="88" y2="94" opacity=".4"/>
+    <g style="animation:artTuck 2.8s ease-in-out infinite">${HEAD}</g>
+    <g style="animation:artFade 2.8s ease-in-out infinite"><path class="ln ac" d="M10 78 H26 M20 72 l7 6 -7 6"/></g>`),
+  "ceiling-lift": svgWrap(`
+    <g style="animation:artCeil 3s ease-in-out infinite;transform-origin:62px 80px">${HEAD}</g>
+    <path class="ln ac" d="M16 44 Q20 30 33 22 M33 22 l-9 1 M33 22 l-2 9" style="animation:artFade 3s ease-in-out infinite"/>`),
+  "tongue-press": svgWrap(`
+    ${HEAD}
+    <path class="ln ac" d="M45 57 Q51 50 57 55" style="animation:artPulse 1.8s ease-in-out infinite"/>`),
+  "cheek-lifter": svgWrap(`
+    <circle class="ln" cx="50" cy="46" r="30"/>
+    <circle cx="40" cy="40" r="2.4" fill="currentColor"/><circle cx="60" cy="40" r="2.4" fill="currentColor"/>
+    <ellipse class="ln" cx="50" cy="61" rx="6" ry="8"/>
+    <g style="animation:artCheek 2s ease-in-out infinite">
+      <path class="ln ac" d="M32 51 q6 6 12 3"/><path class="ln ac" d="M68 51 q-6 6 -12 3"/>
+    </g>`),
+  "neck-stretch": svgWrap(`
+    <path class="ln" d="M18 92 Q50 82 82 92"/>
+    <g style="animation:artTilt 3.4s ease-in-out infinite;transform-origin:50px 84px">
+      <circle class="ln" cx="50" cy="48" r="24"/>
+      <circle cx="42" cy="44" r="2.4" fill="currentColor"/><circle cx="58" cy="44" r="2.4" fill="currentColor"/>
+      <path class="ln" d="M44 58 q6 4 12 0"/>
+    </g>`),
+  "head-lift": svgWrap(`
+    <line class="ln" x1="6" y1="86" x2="94" y2="86" opacity=".4"/>
+    <path class="ln" d="M90 84 L72 84 L62 64 L50 82"/>
+    <g style="animation:artLift 2.8s ease-in-out infinite;transform-origin:42px 84px">
+      <circle class="ln" cx="30" cy="72" r="11"/>
+      <path class="ln ac" d="M38 78 q4 3 8 3"/>
+    </g>`)
+};
+
+const EXERCISES = [
+  {
+    id: "chin-tuck",
+    name: "Chin Tuck",
+    target: "Deep neck flexors · posture",
+    reps: 10, hold: 5, rest: 3,
+    cue: "Glide your head straight back — make a gentle double chin. Keep looking forward, don't tilt.",
+    steps: [
+      "Sit or stand tall, shoulders relaxed, eyes level.",
+      "Glide your head straight back, as if making a gentle double chin.",
+      "Keep your gaze forward — no tilting up or down.",
+      "You should feel a stretch at the base of the skull and light work at the front of the neck.",
+      "Hold, then relax back to neutral. Effort ~3/10 — this is a precise move, not a forceful one."
+    ],
+    evidence: "The standard physical-therapy exercise for forward head posture. It activates the deep cervical flexors (longus colli and capitis) — the muscles that hold your head balanced over your spine. A head that sits back and level is what visibly defines the jaw–neck angle.",
+    caution: null,
+    levels: { gentle: {reps:6, hold:4}, advanced: {reps:12, hold:8} }
+  },
+  {
+    id: "wall-tuck",
+    name: "Wall Chin Tuck",
+    target: "Deep neck flexors · endurance",
+    reps: 5, hold: 10, rest: 5,
+    cue: "Back of your head against the wall, chin gently tucked. Press the head lightly into the wall.",
+    steps: [
+      "Stand with your heels a few centimetres from a wall, upper back and head touching it.",
+      "Tuck your chin so the back of your head slides up the wall slightly.",
+      "Press the back of your head gently into the wall — about 20% effort.",
+      "Breathe normally through your nose while holding.",
+      "Release slowly. The wall gives you feedback that your head is truly back."
+    ],
+    evidence: "A feedback version of the chin tuck used in deep-neck-flexor endurance protocols (typically 10-second holds). Endurance — not just strength — is what keeps your posture upright between sessions.",
+    caution: null,
+    levels: { gentle: {reps:3, hold:8}, advanced: {reps:6, hold:15} }
+  },
+  {
+    id: "ceiling-lift",
+    name: "Ceiling Lift",
+    target: "Platysma · under-chin",
+    reps: 8, hold: 5, rest: 3,
+    cue: "Look up to the ceiling, lips closed, press your tongue to the roof of your mouth.",
+    steps: [
+      "Sit tall and slowly tilt your head back to look at the ceiling.",
+      "Close your lips and press your whole tongue against the roof of your mouth.",
+      "Feel the muscles under your chin and along the front of the neck engage.",
+      "Hold, then slowly return your head to neutral.",
+      "Move gently — the tilt should never pinch the back of your neck."
+    ],
+    evidence: "Targets the platysma and the suprahyoid muscles under the jaw. Toning work here can sharpen the look of mild submental fullness, though it does not burn the fat itself.",
+    caution: "Skip this one if you get dizzy or feel pain when looking up.",
+    levels: { gentle: {reps:5, hold:4}, advanced: {reps:10, hold:8} }
+  },
+  {
+    id: "tongue-press",
+    name: "Tongue Press & Swallow",
+    target: "Tongue posture · suprahyoids",
+    reps: 8, hold: 5, rest: 3,
+    cue: "Press your whole tongue flat against the roof of your mouth. Hold, then swallow once.",
+    steps: [
+      "Lips closed, teeth slightly apart, breathe through your nose.",
+      "Press the entire tongue — tip to back — flat against the palate.",
+      "Hold the press, feeling gentle tension under the chin.",
+      "Finish each rep with one deliberate swallow, keeping the tongue up.",
+      "This trains the resting tongue posture used in myofunctional therapy."
+    ],
+    evidence: "A staple of orofacial myofunctional therapy, which has published evidence for improving tongue posture, nasal breathing and swallowing mechanics. It will not reshape adult bone (the popular 'mewing' claim), but it tones the floor of the mouth that supports the under-chin area.",
+    caution: null,
+    levels: { gentle: {reps:5, hold:4}, advanced: {reps:10, hold:8} }
+  },
+  {
+    id: "cheek-lifter",
+    name: "Cheek Lifter",
+    target: "Cheeks · midface",
+    reps: 10, hold: 4, rest: 3,
+    cue: "Open your mouth into an “O”, fold your upper lip over your teeth, then smile to lift the cheeks.",
+    steps: [
+      "Open your mouth and form a long “O”; fold the upper lip over the front teeth.",
+      "Smile with the cheek muscles to lift them up — you should see them rise.",
+      "Hold the lift, feeling the effort in the upper cheeks, not the jaw.",
+      "Relax fully between reps.",
+      "Keep your forehead and eyes relaxed to avoid scrunching."
+    ],
+    evidence: "Adapted from the routine used in the Northwestern facial-exercise trial (JAMA Dermatology, 2018), where 20 weeks of daily practice measurably increased cheek fullness and shaved ~3 years off rated age. Small study, but the most rigorous one there is.",
+    caution: null,
+    levels: { gentle: {reps:6, hold:3}, advanced: {reps:12, hold:6} }
+  },
+  {
+    id: "neck-stretch",
+    name: "Neck Side Stretch",
+    target: "Cooldown · mobility",
+    reps: 2, hold: 15, rest: 5,
+    cue: "Ear toward shoulder, opposite shoulder heavy. Switch sides on the second hold.",
+    steps: [
+      "Sit tall. Let your right ear drop toward your right shoulder.",
+      "Keep the opposite shoulder heavy and relaxed — don't shrug.",
+      "Breathe slowly; let the stretch deepen on each exhale.",
+      "Do the second hold on the left side.",
+      "A supple neck lets the chin tucks work through a full range."
+    ],
+    evidence: "Tight upper-trapezius and levator scapulae muscles pull you back into forward head posture. Pairing strengthening with gentle stretching is how physical-therapy posture programs are built.",
+    caution: null,
+    levels: { gentle: {reps:2, hold:12}, advanced: {reps:2, hold:20} }
+  },
+  {
+    id: "head-lift",
+    name: "Chin Tuck Head Lift",
+    target: "Deep neck flexors · strength",
+    reps: 5, hold: 8, rest: 8,
+    advancedOnly: true,
+    cue: "Lying down: tuck the chin, then lift your head just 2–3 cm. Keep the tuck the whole time.",
+    steps: [
+      "Lie on your back, knees bent, no pillow (or a very thin one).",
+      "Tuck your chin gently — nod, don't lift yet.",
+      "Keeping the tuck, lift your head 2–3 cm off the floor.",
+      "Hold while breathing; don't let the chin poke toward the ceiling.",
+      "Lower with control. This is the hardest progression — quality over reps."
+    ],
+    evidence: "The loaded progression of craniocervical flexion training used in rehab research. Only appears at Advanced intensity — earn it with two easy weeks first.",
+    caution: "Stop if you feel strain in the throat or shaking you can't control — go back to wall tucks for another week.",
+    levels: { gentle: {reps:3, hold:5}, advanced: {reps:6, hold:10} }
+  }
+];
+
+const LEARN = [
+  {
+    title: "Can 10 minutes beat 5 hours of phone?",
+    body: [
+      "Honestly: not by itself. If you train 10 minutes and then spend 5 hours with your chin at your chest, the exposure wins. The session isn't the whole strategy — it's one of three levers.",
+      "① Train capacity: endurance in the deep neck flexors changes your resting head carriage all day, not just during the session. ② Interrupt the exposure: the damage comes from long uninterrupted stretches in flexion, so Tuck now has 1-minute posture breaks and optional posture pings — three breaks spread across your screen time beat a second full session. ③ Cut the insult at the source: raise your phone to eye level and bring your monitor up. This one costs zero minutes and attacks the whole 5 hours.",
+      "Good timing: full session whenever it reliably fits (morning anchors the habit), posture breaks every 60–90 minutes during screen-heavy stretches."
+    ],
+    src: null
+  },
+  {
+    title: "Why chin tucks?",
+    body: [
+      "Hours of screens pull the head forward. For every couple of centimetres your head sits ahead of your spine, the muscles under your chin lengthen and weaken, and the jaw–neck angle blurs — that's a big part of what people read as a 'soft' jawline.",
+      "Chin tucks are the physical-therapy gold standard for this. They strengthen the deep cervical flexors that hold your head level and back. Better head carriage is the fastest visible change most people can make to their profile — and it helps neck tension too."
+    ],
+    src: "Physio-pedia: deep neck flexor stabilisation · Journal of Physical Therapy Science studies on chin tucks and forward head posture"
+  },
+  {
+    title: "What facial exercise CAN do",
+    body: [
+      "The best trial to date (Northwestern University, JAMA Dermatology 2018) had women aged 40–65 do 30 minutes of facial exercise daily for 20 weeks. Independent dermatologists rated their faces ~3 years younger by the end, with the clearest gains in upper and lower cheek fullness.",
+      "Muscle is the scaffolding of the face. Training it adds a little firmness and fullness where you want it. The catch: it took 20 weeks of consistent work, and the study was small. Think months, not days."
+    ],
+    src: "Alam M. et al., 'Association of Facial Exercise With the Appearance of Aging', JAMA Dermatology 2018"
+  },
+  {
+    title: "What exercise CANNOT do",
+    body: [
+      "You can't spot-reduce fat. No exercise burns the fat pad under your chin specifically — submental fullness responds to overall body-fat changes and genetics. Exercises tone the muscles beneath, which sharpens contour, but they don't melt fat.",
+      "'Mewing' won't remodel adult bone. There are no peer-reviewed trials showing tongue posture changes facial bone structure after growth ends. Tongue-posture training is still worth doing — for muscle tone, nasal breathing and swallowing — just with honest expectations.",
+      "If something promises a new jawline in 7 days, it's selling you something."
+    ],
+    src: "Reviews of orthotropics/mewing evidence · orthodontic association statements"
+  },
+  {
+    title: "The big levers for your face",
+    body: [
+      "If you want the face to look better, these beat any gadget: ① Daily sunscreen — consistent use slowed visible skin aging by ~24% in a 4-year randomized trial. ② A retinoid at night — the best-evidenced topical for texture and fine lines. ③ Sleep 7–9 hours — poor sleep measurably worsens dark circles and skin barrier function. ④ Body-fat percentage — for most people, losing excess fat changes facial definition more than anything else. ⑤ Hydration and mostly-whole-food eating.",
+      "This app covers the posture-and-muscle lever. Stack it with the others and the compounding is real."
+    ],
+    src: "Hughes et al., Ann Intern Med 2013 (sunscreen RCT) · Cleveland Clinic on retinoids · sleep & skin studies"
+  },
+  {
+    title: "Safety first",
+    body: [
+      "These are gentle, low-load exercises, but the neck deserves respect. Effort should feel like 3–4 out of 10. Sharp pain, dizziness, tingling into the arms, or headaches during exercises are stop signs — see a physical therapist.",
+      "If you have TMJ problems, skip anything that aggravates the jaw and keep the teeth slightly apart during tongue presses. Consistency at low intensity wins; forcing it loses."
+    ],
+    src: null
+  }
+];
+
+/* ---------------- State ---------------- */
+
+const store = {
+  get(k, fallback){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; } catch { return fallback; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+
+let settings = Object.assign({ level: "standard", sound: true, vibe: true, ping: 0 }, store.get("ct.settings", {}));
+let log = store.get("ct.log", []); // [{d:'YYYY-MM-DD', mins, ts}]
+
+function saveSettings(){ store.set("ct.settings", settings); }
+function saveLog(){ store.set("ct.log", log); }
+
+const pad = n => String(n).padStart(2, "0");
+const dayKey = d => d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+const todayKey = () => dayKey(new Date());
+const doneDays = () => new Set(log.map(e => e.d));
+const isMicro = e => e.type === "micro";
+const fullToday = () => log.some(e => e.d === todayKey() && !isMicro(e));
+const breaksToday = () => log.filter(e => e.d === todayKey() && isMicro(e)).length;
+const BREAK_GOAL = 3;
+
+/* ---------------- Routine building ---------------- */
+
+function exForLevel(ex){
+  const o = { ...ex };
+  if (settings.level !== "standard" && ex.levels && ex.levels[settings.level]) {
+    Object.assign(o, ex.levels[settings.level]);
+  }
+  return o;
+}
+
+function routine(){
+  return EXERCISES
+    .filter(ex => !ex.advancedOnly || settings.level === "advanced")
+    .map(exForLevel);
+}
+
+const PREP = 8; // get-ready seconds before each exercise
+
+function estimateMinutes(list){
+  let s = 0;
+  for (const ex of list) s += PREP + ex.reps * ex.hold + (ex.reps - 1) * ex.rest;
+  return Math.max(1, Math.round(s / 60));
+}
+
+/* ---------------- Rendering: pages ---------------- */
+
+const $ = s => document.querySelector(s);
+
+function renderToday(){
+  const now = new Date();
+  $("#today-date").textContent = now.toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric" });
+  const h = now.getHours();
+  $("#greeting").textContent = h < 5 ? "Night owl" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+
+  const streak = currentStreak();
+  const did = fullToday();
+  $("#hero-status").innerHTML = did
+    ? `<div class="donebadge">✓ Session done today</div><div class="streak" style="margin-top:6px">Streak: <b>${streak} day${streak===1?"":"s"}</b> — breaks still count below.</div>`
+    : streak > 0
+      ? `<div class="streak">🔥 <b>${streak}-day</b> streak — keep it alive.</div>`
+      : `<div class="streak">A few focused minutes. That's the whole ask.</div>`;
+
+  const list = routine();
+  $("#btn-start").textContent = did ? "Do another round" : "Start session";
+  $("#session-est").textContent = `${list.length} exercises · about ${estimateMinutes(list)} min · ${settings.level}`;
+
+  const b = breaksToday();
+  $("#breaks-row").innerHTML =
+    Array.from({length: Math.max(BREAK_GOAL, b)}, (_, i) => `<span class="bd${i < b ? " on" : ""}"></span>`).join("") +
+    `<span>${b}/${BREAK_GOAL} posture breaks today</span>`;
+
+  $("#routine-list").innerHTML = list.map(ex => `
+    <div class="routine-item">
+      <div class="dot"></div>
+      <div class="nm">${ex.name}</div>
+      <div class="meta">${ex.reps} × ${ex.hold}s</div>
+    </div>`).join("");
+}
+
+function renderExercises(){
+  $("#ex-list").innerHTML = EXERCISES.map((ex, i) => {
+    const lv = exForLevel(ex);
+    return `
+    <div class="card ex-card" data-i="${i}">
+      <div class="ex-head">
+        <div>
+          <div class="ex-title">${ex.name}${ex.advancedOnly ? " ·  advanced" : ""}</div>
+          <div class="ex-target">${ex.target} · ${lv.reps} reps × ${lv.hold}s hold</div>
+        </div>
+        <span class="chev">›</span>
+      </div>
+      <div class="ex-body">
+        <div class="art ex-art">${ART[ex.id] || ""}</div>
+        <ol>${ex.steps.map(s => `<li>${s}</li>`).join("")}</ol>
+        <div class="tag">Why it works</div>
+        <div class="evidence">${ex.evidence}</div>
+        ${ex.caution ? `<div class="caution">⚠ ${ex.caution}</div>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+  document.querySelectorAll(".ex-card").forEach(c =>
+    c.addEventListener("click", () => c.classList.toggle("open")));
+}
+
+function renderLearn(){
+  $("#learn-list").innerHTML = LEARN.map(item => `
+    <div class="card">
+      <div class="ex-title" style="margin-bottom:8px">${item.title}</div>
+      ${item.body.map(p => `<p>${p}</p>`).join("")}
+      ${item.src ? `<div class="src">Sources: ${item.src}</div>` : ""}
+    </div>`).join("");
+}
+
+/* ---------------- Progress ---------------- */
+
+function currentStreak(){
+  const days = doneDays();
+  let d = new Date(), n = 0;
+  if (!days.has(dayKey(d))) d.setDate(d.getDate() - 1);
+  while (days.has(dayKey(d))) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+
+function bestStreak(){
+  const keys = [...doneDays()].sort();
+  let best = 0, run = 0, prev = null;
+  for (const k of keys) {
+    if (prev) {
+      const p = new Date(prev + "T12:00"), c = new Date(k + "T12:00");
+      run = (c - p) / 86400000 === 1 ? run + 1 : 1;
+    } else run = 1;
+    best = Math.max(best, run);
+    prev = k;
+  }
+  return best;
+}
+
+let calCursor = new Date();
+
+function renderProgress(){
+  const days = doneDays();
+  const totalMins = log.reduce((a, e) => a + (e.mins || 0), 0);
+
+  // this week (Mon-based)
+  const now = new Date();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  let weekCount = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday); d.setDate(monday.getDate() + i);
+    if (days.has(dayKey(d))) weekCount++;
+  }
+
+  const stat = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  $("#stats-row").innerHTML =
+    stat(currentStreak(), "day streak") +
+    stat(weekCount + "/7", "this week") +
+    stat(days.size, "total days");
+  $("#stats-row2").innerHTML =
+    stat(bestStreak(), "best streak") +
+    stat(log.filter(isMicro).length, "breaks") +
+    stat(totalMins >= 60 ? (totalMins/60).toFixed(1) + "h" : totalMins + "m", "trained");
+
+  // calendar
+  const y = calCursor.getFullYear(), m = calCursor.getMonth();
+  $("#cal-title").textContent = calCursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const first = new Date(y, m, 1);
+  const startOffset = (first.getDay() + 6) % 7; // Monday first
+  const dim = new Date(y, m + 1, 0).getDate();
+  const tk = todayKey();
+
+  let html = ["M","T","W","T","F","S","S"].map(w => `<div class="wd">${w}</div>`).join("");
+  for (let i = 0; i < startOffset; i++) html += `<div></div>`;
+  for (let d = 1; d <= dim; d++) {
+    const k = y + "-" + pad(m + 1) + "-" + pad(d);
+    const cls = ["cal-day", days.has(k) ? "done" : "", k === tk ? "today" : ""].join(" ");
+    html += `<div class="${cls}">${d}</div>`;
+  }
+  $("#cal-grid").innerHTML = html;
+}
+
+$("#cal-prev").addEventListener("click", () => { calCursor.setMonth(calCursor.getMonth() - 1); renderProgress(); });
+$("#cal-next").addEventListener("click", () => { calCursor.setMonth(calCursor.getMonth() + 1); renderProgress(); });
+
+/* ---------------- Tabs ---------------- */
+
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x === t));
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  $("#page-" + t.dataset.page).classList.add("active");
+  if (t.dataset.page === "progress") renderProgress();
+  if (t.dataset.page === "today") renderToday();
+  window.scrollTo(0, 0);
+}));
+
+/* ---------------- Audio / haptics ---------------- */
+
+let audioCtx = null;
+function beep(freq, dur = 0.12, when = 0){
+  if (!settings.sound) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime + when);
+    g.gain.exponentialRampToValueAtTime(0.22, audioCtx.currentTime + when + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + when + dur);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(audioCtx.currentTime + when); o.stop(audioCtx.currentTime + when + dur + 0.05);
+  } catch {}
+}
+function buzz(ms){ if (settings.vibe && navigator.vibrate) navigator.vibrate(ms); }
+
+/* ---------------- Session player ---------------- */
+
+const RING_LEN = 2 * Math.PI * 44;
+$("#ring").style.strokeDasharray = RING_LEN;
+
+const player = { steps: [], idx: 0, remaining: 0, stepDur: 0, timer: null, paused: false, startedAt: 0, list: [] };
+
+function buildSteps(list){
+  const steps = [];
+  list.forEach((ex, ei) => {
+    steps.push({ type: "prep", dur: PREP, ei });
+    for (let r = 1; r <= ex.reps; r++) {
+      steps.push({ type: "hold", dur: ex.hold, ei, rep: r });
+      if (r < ex.reps) steps.push({ type: "rest", dur: ex.rest, ei, rep: r });
+    }
+  });
+  return steps;
+}
+
+// 1-minute posture break: a fixed micro-dose of the core move
+function microRoutine(){
+  const base = EXERCISES.find(e => e.id === "chin-tuck");
+  return [{ ...base, reps: 8, hold: 5, rest: 2 }];
+}
+
+function startSession(list, type){
+  player.list = list;
+  player.type = type;
+  player.steps = buildSteps(player.list);
+  player.idx = 0;
+  player.paused = false;
+  player.startedAt = Date.now();
+  $("#p-done").style.display = "none";
+  $("#p-mid").style.display = "flex";
+  $("#p-pause").textContent = "Pause";
+  $("#p-skip").textContent = "Skip";
+  $("#player").classList.add("active");
+  document.body.style.overflow = "hidden";
+  beep(660); // unlock audio on the tap
+  enterStep();
+}
+
+/* Haptic language — each event has a distinct pattern:
+   new exercise: one long buzz · hold starts: double buzz · rest starts: short buzz
+   3-2-1 before a hold: tick pulses, so you can train without watching the screen */
+function enterStep(){
+  const st = player.steps[player.idx];
+  if (!st) { finishSession(); return; }
+  player.stepDur = st.dur;
+  player.remaining = st.dur;
+  player.lastSecs = null;
+  const ex = player.list[st.ei];
+
+  $("#p-count").textContent = `Exercise ${st.ei + 1} of ${player.list.length}`;
+  $("#p-exname").textContent = ex.name;
+  const phaseEl = $("#p-phase");
+  if (st.type === "prep") { phaseEl.textContent = "Get ready"; phaseEl.classList.add("rest"); }
+  else if (st.type === "hold") { phaseEl.textContent = "Hold"; phaseEl.classList.remove("rest"); }
+  else { phaseEl.textContent = "Relax"; phaseEl.classList.add("rest"); }
+  $("#ring").classList.toggle("rest", st.type !== "hold");
+  $("#p-art").innerHTML = ART[ex.id] || "";
+  $("#p-rep").textContent = st.type === "prep" ? `${ex.reps} reps × ${ex.hold}s` : `Rep ${st.rep} of ${ex.reps}`;
+  $("#p-cue").textContent = st.type === "prep" ? ex.steps[0] + " " + ex.cue : ex.cue;
+
+  if (st.type === "hold") { beep(880, .14); buzz([70, 60, 70]); }
+  else if (st.type === "rest") { beep(440, .12); buzz(45); }
+  else { beep(550, .1); buzz(220); }
+
+  paintTick();
+  clearInterval(player.timer);
+  player.timer = setInterval(tick, 100);
+}
+
+function tick(){
+  if (player.paused) return;
+  player.remaining -= 0.1;
+  if (player.remaining <= 0) { player.idx++; enterStep(); return; }
+  paintTick();
+}
+
+function paintTick(){
+  const st = player.steps[player.idx];
+  const secs = Math.ceil(player.remaining);
+  if (secs !== player.lastSecs) {
+    // countdown warning before the next hold (during prep/rest only)
+    if (player.lastSecs !== null && st && st.type !== "hold" && secs <= 3 && secs > 0) {
+      beep(740, .06); buzz(25);
+    }
+    player.lastSecs = secs;
+  }
+  $("#p-secs").textContent = secs;
+  const frac = player.stepDur > 0 ? Math.max(0, player.remaining / player.stepDur) : 0;
+  $("#ring").style.strokeDashoffset = RING_LEN * (1 - frac);
+}
+
+function skipStep(){
+  const st = player.steps[player.idx];
+  if (!st) return;
+  // skip to the next exercise (or end)
+  let i = player.idx;
+  while (i < player.steps.length && player.steps[i].ei === st.ei) i++;
+  player.idx = i;
+  enterStep();
+}
+
+function togglePause(){
+  player.paused = !player.paused;
+  $("#p-pause").textContent = player.paused ? "Resume" : "Pause";
+}
+
+function finishSession(){
+  clearInterval(player.timer);
+  const mins = Math.max(1, Math.round((Date.now() - player.startedAt) / 60000));
+  log.push({ d: todayKey(), mins, ts: Date.now(), type: player.type });
+  saveLog();
+  syncNow(false);
+  buzz([80, 60, 80, 60, 140]); beep(660, .12); beep(880, .12, .15); beep(1100, .2, .3);
+  $("#p-mid").style.display = "none";
+  $("#p-done").style.display = "flex";
+  const s = currentStreak();
+  $("#p-done-sub").textContent = player.type === "micro"
+    ? `${breaksToday()}/${BREAK_GOAL} breaks today · ${s}-day streak. Next one in an hour or so.`
+    : `${mins} min · ${s}-day streak. Same time tomorrow.`;
+  $("#p-pause").textContent = "Close";
+  $("#p-skip").textContent = "Done";
+}
+
+function closePlayer(){
+  clearInterval(player.timer);
+  $("#player").classList.remove("active");
+  document.body.style.overflow = "";
+  renderToday();
+}
+
+$("#btn-start").addEventListener("click", () => startSession(routine(), "full"));
+$("#btn-break").addEventListener("click", () => startSession(microRoutine(), "micro"));
+$("#p-close").addEventListener("click", closePlayer);
+$("#p-pause").addEventListener("click", () => {
+  if ($("#p-done").style.display !== "none") { closePlayer(); return; }
+  togglePause();
+});
+$("#p-skip").addEventListener("click", () => {
+  if ($("#p-done").style.display !== "none") { closePlayer(); return; }
+  skipStep();
+});
+
+/* ---------------- Settings sheet ---------------- */
+
+function openSheet(){ $("#sheet-backdrop").classList.add("active"); $("#sheet").classList.add("active"); renderSheet(); }
+function closeSheet(){ $("#sheet-backdrop").classList.remove("active"); $("#sheet").classList.remove("active"); }
+
+function renderSheet(){
+  document.querySelectorAll("#seg-level button").forEach(b =>
+    b.classList.toggle("on", b.dataset.v === settings.level));
+  document.querySelectorAll("#seg-ping button").forEach(b =>
+    b.classList.toggle("on", +b.dataset.v === settings.ping));
+  $("#sw-sound").classList.toggle("on", settings.sound);
+  $("#sw-vibe").classList.toggle("on", settings.vibe);
+  renderSync();
+}
+
+$("#btn-settings").addEventListener("click", openSheet);
+$("#sheet-backdrop").addEventListener("click", closeSheet);
+document.querySelectorAll("#seg-level button").forEach(b => b.addEventListener("click", () => {
+  settings.level = b.dataset.v; saveSettings(); renderSheet(); renderToday(); renderExercises();
+}));
+document.querySelectorAll("#seg-ping button").forEach(b => b.addEventListener("click", () => {
+  settings.ping = +b.dataset.v; saveSettings(); renderSheet(); resetPing();
+  if (settings.ping > 0) {
+    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+    toast(`Posture ping every ${settings.ping} min while Tuck is open`);
+  }
+}));
+$("#sw-sound").addEventListener("click", () => { settings.sound = !settings.sound; saveSettings(); renderSheet(); if (settings.sound) beep(660); });
+$("#sw-vibe").addEventListener("click", () => { settings.vibe = !settings.vibe; saveSettings(); renderSheet(); buzz(50); });
+$("#btn-reset").addEventListener("click", () => {
+  if (!confirm("Delete all progress and settings? This cannot be undone.")) return;
+  localStorage.removeItem("ct.log"); localStorage.removeItem("ct.settings");
+  log = []; settings = { level: "standard", sound: true, vibe: true, ping: 0 };
+  closeSheet(); renderToday(); renderExercises(); renderProgress(); toast("All data cleared");
+});
+
+/* ---------------- Posture pings ----------------
+   Fire while the app is open: haptic + toast in the foreground,
+   a system notification if the tab/app is in the background. */
+
+let pingDue = 0;
+function resetPing(){ pingDue = settings.ping > 0 ? Date.now() + settings.ping * 60000 : 0; }
+
+function firePing(){
+  buzz([80, 60, 80]);
+  const msg = "Posture check — chin back, screen up. 1-minute break?";
+  if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then(r => r.showNotification("Tuck", { body: msg, icon: "icons/icon-192.png" }));
+      } else {
+        new Notification("Tuck", { body: msg });
+      }
+    } catch {}
+  } else {
+    toast("Posture check: chin back, screen up"); beep(660, .1);
+  }
+}
+
+setInterval(() => {
+  if (!settings.ping || !pingDue) return;
+  if (Date.now() >= pingDue) { resetPing(); firePing(); }
+}, 20000);
+resetPing();
+
+/* ---------------- Cloud sync (optional) ----------------
+   Capability model: a secret sync code (UUID) scopes your rows via
+   row-level security on the server. No account, no email. Anyone you
+   give the code to shares the same progress — treat it like a key. */
+
+const SYNC = {
+  url: "https://sgwsfolrbqpdnukljkpi.supabase.co/rest/v1/tuck_sessions",
+  key: "sb_publishable_epcZR8wwOHxf5PIu9jUiIQ_NWjZUDHj"
+};
+
+function syncHeaders(){
+  return {
+    "apikey": SYNC.key,
+    "Authorization": "Bearer " + SYNC.key,
+    "x-sync-key": settings.syncKey,
+    "Content-Type": "application/json"
+  };
+}
+
+let syncing = false;
+async function syncNow(interactive){
+  if (!settings.syncKey || syncing) return;
+  syncing = true;
+  try {
+    const rows = log.map(e => ({
+      sync_key: settings.syncKey, ts: e.ts, d: e.d,
+      mins: e.mins || 1, type: isMicro(e) ? "micro" : "full"
+    }));
+    if (rows.length) {
+      const r = await fetch(SYNC.url + "?on_conflict=sync_key,ts", {
+        method: "POST",
+        headers: { ...syncHeaders(), "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(rows)
+      });
+      if (!r.ok) throw new Error("push " + r.status);
+    }
+    const g = await fetch(SYNC.url + "?select=ts,d,mins,type&order=ts.asc", { headers: syncHeaders() });
+    if (!g.ok) throw new Error("pull " + g.status);
+    const remote = await g.json();
+    const have = new Set(log.map(e => e.ts));
+    let added = 0;
+    for (const r of remote) {
+      if (!have.has(r.ts)) { log.push({ d: r.d, mins: r.mins, ts: r.ts, type: r.type === "micro" ? "micro" : "full" }); added++; }
+    }
+    if (added) { log.sort((a, b) => a.ts - b.ts); saveLog(); renderToday(); renderProgress(); }
+    if (interactive) toast(added ? `Synced — pulled ${added} session${added === 1 ? "" : "s"}` : "Synced");
+  } catch (e) {
+    if (interactive) toast("Sync failed — check your connection");
+  } finally {
+    syncing = false;
+  }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function renderSync(){
+  const btns = $("#sync-ui-btns"), body = $("#sync-ui");
+  if (settings.syncKey) {
+    btns.innerHTML = `<button class="minibtn" id="sync-now">Sync now</button>`;
+    body.innerHTML = `
+      <div class="set-note">Enter this code in Settings on your other device. Keep it private — it IS the access to your progress.</div>
+      <div class="sync-code">${settings.syncKey}</div>
+      <div class="sync-row">
+        <button class="minibtn plain" id="sync-copy" style="flex:1">Copy code</button>
+        <button class="minibtn plain" id="sync-off" style="flex:1">Turn off on this device</button>
+      </div>`;
+    $("#sync-now").addEventListener("click", () => syncNow(true));
+    $("#sync-copy").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(settings.syncKey); toast("Code copied"); }
+      catch { toast("Copy failed — long-press the code instead"); }
+    });
+    $("#sync-off").addEventListener("click", () => {
+      settings.syncKey = null; saveSettings(); renderSync();
+      toast("Sync off — local data kept");
+    });
+  } else {
+    btns.innerHTML = `<button class="minibtn" id="sync-on">Turn on</button>`;
+    body.innerHTML = `
+      <div class="set-note">Backs up your progress and shares it between devices. No account — you get a secret code instead.</div>
+      <div class="sync-row">
+        <input id="sync-input" placeholder="Have a code? Paste it here" autocomplete="off" spellcheck="false">
+        <button class="minibtn" id="sync-link">Link</button>
+      </div>`;
+    $("#sync-on").addEventListener("click", () => {
+      settings.syncKey = crypto.randomUUID(); saveSettings(); renderSync(); syncNow(true);
+    });
+    $("#sync-link").addEventListener("click", () => {
+      const v = $("#sync-input").value.trim().toLowerCase();
+      if (!UUID_RE.test(v)) { toast("That doesn't look like a sync code"); return; }
+      settings.syncKey = v; saveSettings(); renderSync(); syncNow(true);
+    });
+  }
+}
+
+/* ---------------- Toast ---------------- */
+
+let toastTimer;
+function toast(msg){
+  const el = $("#toast");
+  el.textContent = msg; el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+/* ---------------- Boot ---------------- */
+
+renderToday();
+renderExercises();
+renderLearn();
+renderProgress();
+syncNow(false);
+
+if ("serviceWorker" in navigator) {
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+</script>
+</body>
+</html>
