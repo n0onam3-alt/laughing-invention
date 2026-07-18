@@ -2,6 +2,65 @@
 
 Mobile-first PWA workout tracker for the Min-Max Program.
 
+## v17.4 "guardrails"
+Data-integrity fixes:
+- editing a workout no longer loses data: switching day mid-edit asks to stop editing first
+  (previously it silently rewrote the workout against the wrong day's plan), extra sets from
+  older program versions stay visible and survive updates, and a prominent "✏️ Editing" banner
+  with a Cancel button replaces the easy-to-miss "· editing" suffix ("Clear" reads
+  "Cancel edit" while editing)
+- an edit saved while a sync upload is in flight is no longer dropped from the upload queue;
+  erase/reset can no longer race an in-flight sync and resurrect deleted workouts; queued
+  cloud deletes survive "Reset local data"
+- saving while an input is still focused no longer leaves the just-saved sets on screen as a
+  stale draft (which could be re-saved as a duplicate)
+- half-entered sets (load typed, reps pending) survive re-renders instead of being wiped
+- a corrupt saved draft no longer bricks the app on every launch
+- delete got an Undo button in the toast; deleting as a signed-out user no longer shows a
+  permanent "pending" warning or cloud jargon
+
+Numbers that were wrong:
+- dead hangs no longer count bodyweight×seconds as kg×reps (a single hang could add 9,000 kg
+  of phantom volume and unlock the tonnage badges), and pull-up volume no longer drops to
+  zero when the bodyweight field is empty (falls back to last logged/profile weight)
+- PRs and per-exercise charts compare like with like: bodyweight is folded into e1RM for
+  bodyweight exercises, so "12 pull-ups" vs "+10 kg × 6" no longer compares reps to kilograms
+- night/dawn badges use the workout's actual time, not when Save was pressed; the
+  "all 4 days in 7 days" badge no longer accepts a 13-day spread
+- CSV export is comma-delimited (Sheets/US Excel readable), marks timed sets, and the export
+  filenames no longer say v13
+
+Visual/PWA:
+- content no longer renders under the iPhone status bar in the installed app
+  (safe-area-inset-top), sticky month headers in the Log actually stick now, the chart's
+  value label no longer collides with the axis label, single-entry charts don't print the
+  same date twice
+- toasts render above modals and badge reveals (the "Type ERASE to continue" hint was
+  appearing blurred behind the dialog), the rest pill clears two-line toasts and its press
+  animation works, pressed modal buttons stay inside the rounded corners
+- frosted-glass bars no longer degrade to opaque on iOS ≤ 17 (-webkit-backdrop-filter is
+  now part of the @supports check); placeholders (which carry last-session numbers) meet
+  readable contrast
+- offline resilience: the Supabase SDK is runtime-cached so signed-in users stay signed in
+  when launching offline (plus auto-restore when back online), the service-worker precache
+  fails loudly instead of activating empty, any entry URL falls back to the cached app shell
+  offline, navigation preload speeds up cold launches, sw.js version comes from its
+  registration URL (no more triple-maintained version strings), and paths are base-relative
+  (subpath deploys work)
+- app updates no longer restart the app mid-rest-timer — the reload defers until the app is
+  hidden
+- a maskable icon variant (proper safe-zone padding), manifest `id`, favicon link (no more
+  404), `mobile-web-app-capable` meta
+- a11y: modal focus trap + labelled dialogs, badge reveal is keyboard-dismissable, bottom
+  nav exposes the current page, the workout progress bar is a real progressbar, day chips
+  and view toggles expose pressed state, week arrows disable at range bounds, 40px week
+  buttons, 32px chart tap targets, focus rings on chips are no longer clipped
+- misc: current-year dates drop the year in the Log (the meta line fits on one line),
+  finished days collapse instead of re-opening the first exercise, the active day chip
+  scrolls into view, chart empty-states fill the reserved area, "Forgot password?" recovery,
+  friendly offline error copy, sign-in fields survive tab switches, log cards stay expanded
+  across refreshes, toasts scale their duration with message length
+
 ## v17.3 "vault"
 Badge vault (replaces the gold champion mode):
 - 12 secret badges with hidden unlock conditions — locked slots show only "?"

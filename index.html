@@ -5,11 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f2f2f7">
   <meta name="description" content="Mobile-first Min-Max training tracker with Supabase sync.">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MinMax">
   <title>MinMax Tracker</title>
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="dns-prefetch" href="https://fgeseogicphovwroritm.supabase.co">
@@ -26,7 +28,7 @@
     }
   }catch(e){}
   </script>
-  <link rel="stylesheet" href="src/styles.css?v=17.3.1">
+  <link rel="stylesheet" href="src/styles.css?v=17.4.0">
   <script type="application/json" id="programFallback">{
   "version": "7.0.0",
   "title": "The Min-Max Program",
@@ -378,7 +380,7 @@
     ]
   }
 }</script>
-  <script defer src="src/app.js?v=17.3.1"></script>
+  <script defer src="src/app.js?v=17.4.0"></script>
 </head>
 <body>
   <noscript><div class="noscript">Enable JavaScript to use MinMax Tracker.</div></noscript>
@@ -397,9 +399,10 @@
             <button id="weekPlus" type="button" aria-label="Next week"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l5 6-5 6"/></svg></button>
           </div>
         </div>
-        <div id="dayTabs" class="chips" role="tablist" aria-label="Training day"></div>
+        <div id="editBanner" class="edit-banner" hidden></div>
+        <div id="dayTabs" class="chips" role="group" aria-label="Training day"></div>
         <div class="progress-wrap">
-          <div class="progress-track" aria-label="Workout completion"><span id="workoutProgress"></span></div>
+          <div class="progress-track" role="progressbar" aria-label="Workout completion" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="workoutProgress"></span></div>
           <div class="progress-meta"><span id="trainSub">Loading program…</span><span class="status-pill" id="syncChip">Local</span></div>
         </div>
       </header>
@@ -433,9 +436,9 @@
     <section id="pageProgress" class="page" data-page="progress">
       <header class="hero"><h1>Progress</h1></header>
       <section class="card compact">
-        <div class="segmented" role="tablist" aria-label="Progress view">
-          <button id="viewOverall" class="seg active" type="button" data-view="overall">Overall</button>
-          <button id="viewExercise" class="seg" type="button" data-view="exercise">Exercise</button>
+        <div class="segmented" role="group" aria-label="Progress view">
+          <button id="viewOverall" class="seg active" type="button" data-view="overall" aria-pressed="true">Overall</button>
+          <button id="viewExercise" class="seg" type="button" data-view="exercise" aria-pressed="false">Exercise</button>
         </div>
         <div id="progressControls" class="grid2 controls-grid">
           <label>Exercise<select id="progressExercise"></select></label>
@@ -510,7 +513,7 @@
   <button id="restPill" class="rest-pill" type="button" hidden aria-label="Rest timer — tap to skip"></button>
 
   <nav class="bottom-nav" aria-label="Main navigation">
-    <button class="navbtn active" data-nav="train" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M7.5 6.5v11M16.5 6.5v11M20 9v6M7.5 12h9"/></svg>Train</button>
+    <button class="navbtn active" data-nav="train" type="button" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M7.5 6.5v11M16.5 6.5v11M20 9v6M7.5 12h9"/></svg>Train</button>
     <button class="navbtn" data-nav="log" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9"/></svg>Log</button>
     <button class="navbtn" data-nav="progress" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/></svg>Progress</button>
     <button class="navbtn" data-nav="settings" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>Settings</button>

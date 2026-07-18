@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '17.3.1';
+const APP_VERSION = '17.4.0';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';
@@ -30,7 +30,7 @@ const round = v => Math.round((Number(v)||0)*10)/10;
 const uid = () => 's_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,9);
 const localDate = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const nowIso = () => new Date().toISOString();
-const fmtDate = d => { const x=new Date(`${d}T00:00:00`); return Number.isNaN(x.getTime())?d:x.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); };
+const fmtDate = d => { const x=new Date(`${d}T00:00:00`); if(Number.isNaN(x.getTime())) return d; const sameYear=x.getFullYear()===new Date().getFullYear(); return x.toLocaleDateString(undefined, sameYear?{month:'short',day:'numeric'}:{month:'short',day:'numeric',year:'numeric'}); };
 const shortDate = d => { const x=new Date(`${d}T00:00:00`); return Number.isNaN(x.getTime())?d:x.toLocaleDateString(undefined,{month:'short',day:'numeric'}); };
 const updatedAt = s => s?.updated_at || s?.updatedAt || nowIso();
 const deletedAt = s => s?.deleted_at || s?.deletedAt || null;
@@ -48,10 +48,10 @@ const store = {
    sessions) are rebuilt lazily and invalidated once per data change instead of being
    recomputed from scratch on every render — this was the main source of UI lag. */
 const entryCache=new Map(), summaryCache=new Map(), metaIndex=new Map();
-let sortedSessionsCache=null, namesCache=null;
+let sortedSessionsCache=null, namesCache=null, lastBwCache;
 const dirty={train:false, log:true, progress:true};
 const pageScroll={};
-function invalidateDataCache(){ entryCache.clear(); summaryCache.clear(); sortedSessionsCache=null; namesCache=null; }
+function invalidateDataCache(){ entryCache.clear(); summaryCache.clear(); sortedSessionsCache=null; namesCache=null; lastBwCache=undefined; }
 function activeSessionsAsc(){
   if(!sortedSessionsCache){
     sortedSessionsCache=state.sessions.filter(s=>!state.pendingDeletes.has(String(s.id)))
@@ -106,25 +106,47 @@ function milestoneMessage(session){
   return '';
 }
 
-function toast(msg, tone=''){
+function toast(msg, tone='', action=null){
   const el = $('#toast');
   if(!el) return;
   const pill=$('#restPill');
   if(!msg){ el.hidden=true; el.textContent=''; el.dataset.tone=''; el.classList.remove('show'); pill?.classList.remove('shifted'); return; }
-  el.textContent = msg; el.hidden = false; el.dataset.tone = tone;
+  if(action){
+    el.textContent='';
+    el.append(msg + ' ');
+    const btn=document.createElement('button');
+    btn.type='button'; btn.className='toast-act'; btn.textContent=action.label;
+    btn.onclick=e=>{ e.stopPropagation(); toast(''); action.fn(); };
+    el.appendChild(btn);
+  } else {
+    el.textContent = msg;
+  }
+  el.hidden = false; el.dataset.tone = tone;
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   pill?.classList.add('shifted');
-  clearTimeout(el._t); el._t=setTimeout(()=>toast(''), 2600);
+  // Longer messages (milestones, errors) and actionable toasts get more reading time.
+  const dur = (action?5200:2600) + Math.min(2400, Math.max(0, msg.length-40)*30);
+  clearTimeout(el._t); el._t=setTimeout(()=>toast(''), dur);
 }
 
 function modal({title, message, danger=false, requireText='', confirmText='Confirm'}){
   return new Promise(resolve=>{
     const root=$('#modalRoot');
-    root.innerHTML = `<div class="modal-backdrop" role="dialog" aria-modal="true"><div class="modal"><h2>${esc(title)}</h2><p class="muted" style="margin-top:8px">${esc(message)}</p>${requireText?`<label style="margin-top:14px">Type ${esc(requireText)}<input id="modalConfirmInput" autocomplete="off"></label>`:''}<div class="modal-actions"><button id="modalCancel" class="btn ghost" type="button">Cancel</button><button id="modalOk" class="btn ${danger?'danger-fill':'primary'}" type="button">${esc(confirmText)}</button></div></div></div>`;
+    root.innerHTML = `<div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalMsg"><div class="modal"><h2 id="modalTitle">${esc(title)}</h2><p id="modalMsg" class="muted" style="margin-top:8px">${esc(message)}</p>${requireText?`<label style="margin-top:14px">Type ${esc(requireText)}<input id="modalConfirmInput" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go"></label>`:''}<div class="modal-actions"><button id="modalCancel" class="btn ghost" type="button">Cancel</button><button id="modalOk" class="btn ${danger?'danger-fill':'primary'}" type="button">${esc(confirmText)}</button></div></div></div>`;
     const opener = document.activeElement;
     const cleanup = val => { document.removeEventListener('keydown', onKey); root.innerHTML=''; if(opener?.focus) opener.focus(); resolve(val); };
-    const confirm = () => { if(requireText && $('#modalConfirmInput').value.trim() !== requireText){ toast(`Type ${requireText} to continue`); $('#modalConfirmInput')?.focus(); return; } cleanup(true); };
-    const onKey = e => { if(e.key==='Escape'){ e.preventDefault(); cleanup(false); } else if(e.key==='Enter'){ e.preventDefault(); confirm(); } };
+    const confirm = () => { if(requireText && $('#modalConfirmInput').value.trim().toUpperCase() !== requireText.toUpperCase()){ toast(`Type ${requireText} to continue`); $('#modalConfirmInput')?.focus(); return; } cleanup(true); };
+    const onKey = e => {
+      if(e.key==='Escape'){ e.preventDefault(); cleanup(false); }
+      else if(e.key==='Enter'){ e.preventDefault(); confirm(); }
+      else if(e.key==='Tab'){ // keep focus inside the dialog
+        const f=$$('.modal input, .modal button', root).filter(x=>!x.disabled);
+        if(!f.length) return;
+        const first=f[0], last=f[f.length-1];
+        if(e.shiftKey && (document.activeElement===first || !root.contains(document.activeElement))){ e.preventDefault(); last.focus(); }
+        else if(!e.shiftKey && (document.activeElement===last || !root.contains(document.activeElement))){ e.preventDefault(); first.focus(); }
+      }
+    };
     document.addEventListener('keydown', onKey);
     $('#modalCancel').onclick=()=>cleanup(false);
     $('.modal-backdrop').onclick=e=>{ if(e.target.classList.contains('modal-backdrop')) cleanup(false); };
@@ -212,7 +234,8 @@ function buildBadgeCtx(session, prs){
   if(others.length){ const latest=others.reduce((m,s)=>s.date>m?s.date:m, others[0].date); gapDays=Math.round((new Date(session.date)-new Date(latest))/86400000); }
   return {
     total:sessions.length,
-    hour:new Date().getHours(),
+    // Time badges should reflect when you trained, not when you pressed Save.
+    hour:new Date(session.meta?.finishedAt||session.meta?.startedAt||Date.now()).getHours(),
     maxReps, maxLoad,
     bw:Number(session.bw)||Number(lastBodyweight())||Number(state.prefs.profile?.weight)||0,
     prs:prs.length,
@@ -221,7 +244,7 @@ function buildBadgeCtx(session, prs){
     exCount:session.exercises.length,
     gapDays,
     lifetimeVol:lifetimeVolume(),
-    weekSweep:state.split.length>=2 && state.split.every(d=>sessions.some(s=>s.day===d && Math.abs(new Date(session.date)-new Date(s.date))<=6.5*86400000))
+    weekSweep:state.split.length>=2 && state.split.every(d=>sessions.some(s=>{ const diff=(new Date(session.date)-new Date(s.date))/86400000; return s.day===d && diff>=0 && diff<=6; }))
   };
 }
 function checkBadges(ctx){
@@ -238,12 +261,16 @@ function showBadge(b, onDone){
   haptic([20,80,20]); confetti(34);
   const el=document.createElement('div');
   el.className='badge-pop';
-  el.innerHTML=`<div class="badge-card" role="alertdialog" aria-label="Badge unlocked: ${esc(b.name)}"><span class="badge-glow" aria-hidden="true"></span><span class="badge-icon">${b.icon}</span><span class="badge-tag">Badge unlocked</span><b class="badge-name">${esc(b.name)}</b><span class="badge-line">${esc(b.line)}</span><span class="badge-hint">Tap to continue</span></div>`;
+  el.innerHTML=`<div class="badge-card" role="alertdialog" aria-label="Badge unlocked: ${esc(b.name)}" tabindex="-1"><span class="badge-glow" aria-hidden="true"></span><span class="badge-icon">${b.icon}</span><span class="badge-tag">Badge unlocked</span><b class="badge-name">${esc(b.name)}</b><span class="badge-line">${esc(b.line)}</span><span class="badge-hint">Tap to continue</span></div>`;
   document.body.appendChild(el);
+  const opener=document.activeElement;
   let closed=false;
-  const close=()=>{ if(closed) return; closed=true; el.classList.add('out'); setTimeout(()=>{ el.remove(); if(onDone) onDone(); }, 200); };
+  const close=()=>{ if(closed) return; closed=true; document.removeEventListener('keydown', onKey); el.classList.add('out'); setTimeout(()=>{ el.remove(); if(opener?.focus) opener.focus(); if(onDone) onDone(); }, 200); };
+  const onKey=e=>{ if(e.key==='Escape'||e.key==='Enter'||e.key===' '){ e.preventDefault(); close(); } };
+  document.addEventListener('keydown', onKey);
   el.addEventListener('click', close);
-  setTimeout(close, 4500);
+  try{ $('.badge-card', el).focus({preventScroll:true}); }catch(e){}
+  setTimeout(close, 7000);
 }
 function revealBadges(list){ if(!list.length) return; showBadge(list[0], ()=>revealBadges(list.slice(1))); }
 function renderBadgeCount(){ const el=$('#badgeCount'); if(el) el.textContent=`🏅 ${Object.keys(state.prefs.badges).length}/${BADGES.length}`; }
@@ -273,7 +300,8 @@ function collectProfile(){
   p.weight=Math.max(30,Number($('#pWeight')?.value)||76);
   p.age=clamp($('#pAge')?.value||24,10,100);
   saveLocal(false);
-  dirty.train=true; // goal suggestions depend on profile weight
+  invalidateDataCache(); // bodyweight-based volume/e1RM fall back to the profile weight
+  dirty.train=dirty.progress=true; // goal suggestions and summaries depend on profile weight
 }
 function setShowRir(on){
   state.prefs.showRir = !!on;
@@ -326,7 +354,13 @@ function loadLocal(){
   invalidateDataCache();
   pruneQueues();
   saveLocal(false);
-  try{ const d=JSON.parse(store.getItem(DRAFT_KEY)||'null'); state.draft=d&&typeof d==='object'?{...createDraft(),...d,meta:normalizeMeta(d.meta||{})}:createDraft(); }catch(e){ initDraft(); }
+  try{
+    const d=JSON.parse(store.getItem(DRAFT_KEY)||'null');
+    state.draft=d&&typeof d==='object'?{...createDraft(),...d,meta:normalizeMeta(d.meta||{})}:createDraft();
+    // A truncated/hand-edited draft must not brick startup: keep only well-formed exercise entries.
+    const ex=state.draft.exercises;
+    state.draft.exercises=(ex&&typeof ex==='object'&&!Array.isArray(ex))?Object.fromEntries(Object.entries(ex).filter(([,v])=>v&&Array.isArray(v.sets))):{};
+  }catch(e){ initDraft(); store.removeItem(DRAFT_KEY); }
   // Restore edit mode across reloads — otherwise saving a restored draft duplicates the workout being edited.
   const draftEdit = state.draft?.editId ? String(state.draft.editId) : null;
   state.editId = draftEdit && state.sessions.some(s=>String(s.id)===draftEdit) ? draftEdit : null;
@@ -359,7 +393,7 @@ async function refreshProgram(){
     if(!res.ok) return;
     const fresh = await res.json();
     if(!fresh || !fresh.days) return;
-    if(fresh.version !== state.program?.version){ applyProgram(fresh); renderTrain(); }
+    if(fresh.version !== state.program?.version){ applyProgram(fresh); dataChanged(); } // dataChanged respects the typing/focus guard
     else state.program = fresh;
   }catch(e){}
 }
@@ -373,26 +407,50 @@ function setPage(page){
   pageScroll[state.page]=window.scrollY;
   state.page=page;
   $$('.page').forEach(p=>p.classList.toggle('active', p.dataset.page===page));
-  $$('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.nav===page));
+  $$('.navbtn').forEach(b=>{ const on=b.dataset.nav===page; b.classList.toggle('active', on); if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
   if(page==='settings') renderAuth();
   renderActivePage();
   window.scrollTo(0, pageScroll[page]||0);
 }
 function renderTrain(){ dirty.train=false; const list=currentExercises(); if(state.exIndex>=list.length) state.exIndex=firstOpenIndex(); $('#weekNumber').textContent=state.week; renderDayTabs(); fillSessionFields(); renderWorkout(); renderTrainStatus(); }
-function renderDayTabs(){ $('#dayTabs').innerHTML = state.split.map(d=>`<button class="chip ${d===state.day?'active':''}" data-day="${esc(d)}" type="button" role="tab" aria-selected="${d===state.day}">${esc(d)}</button>`).join(''); }
+function renderDayTabs(){ $('#dayTabs').innerHTML = state.split.map(d=>`<button class="chip ${d===state.day?'active':''}" data-day="${esc(d)}" type="button" aria-pressed="${d===state.day}">${esc(d)}</button>`).join(''); try{ $('#dayTabs .chip.active')?.scrollIntoView({inline:'nearest', block:'nearest'}); }catch(e){} }
 function completedCount(){ return currentExercises().filter(ex => (state.draft.exercises[ex.name]?.sets||[]).some(s=>s.reps>0)).length; }
-function renderTrainStatus(){ const total=currentExercises().length, done=completedCount(); const light=(state.program?.lightWeeks||[]).includes(state.week); $('#trainTitle').textContent=state.day; $('#trainSub').textContent=`${done}/${total} logged${light?' · light week':''}${state.editId?' · editing':''}`; $('#workoutProgress').style.width= total ? `${done/total*100}%` : '0%'; const saveBtn=$('#saveWorkout'); if(saveBtn) saveBtn.textContent=state.editId?'Update workout':'Save workout'; }
-function lastBodyweight(){ const list=activeSessionsAsc(); for(let i=list.length-1;i>=0;i--){ if(Number(list[i].bw)>0) return list[i].bw; } return null; }
+function renderTrainStatus(){
+  const total=currentExercises().length, done=completedCount();
+  const light=(state.program?.lightWeeks||[]).includes(state.week);
+  $('#trainTitle').textContent=state.day;
+  $('#trainSub').textContent=`${done}/${total} logged${light?' · light week':''}`;
+  const pct=total?Math.round(done/total*100):0;
+  const track=$('.progress-track'); if(track){ track.setAttribute('aria-valuenow', String(pct)); track.setAttribute('aria-valuetext', `${done} of ${total} exercises logged`); }
+  $('#workoutProgress').style.width=`${pct}%`;
+  const saveBtn=$('#saveWorkout'); if(saveBtn) saveBtn.textContent=state.editId?'Update workout':'Save workout';
+  const clearBtn=$('#clearDraft'); if(clearBtn) clearBtn.textContent=state.editId?'Cancel edit':'Clear';
+  // Edit mode gets an unmissable banner — the old '· editing' suffix was too easy to overlook.
+  const banner=$('#editBanner');
+  if(banner){
+    if(state.editId){
+      const s=state.sessions.find(x=>String(x.id)===String(state.editId));
+      banner.innerHTML=`<span>✏️ Editing ${esc(s?`${s.day} · ${fmtDate(s.date)}`:'saved workout')}</span><button id="cancelEdit" type="button">Cancel</button>`;
+      banner.hidden=false;
+    } else { banner.hidden=true; banner.innerHTML=''; }
+  }
+  // Week stepper: disable at range bounds instead of silently doing nothing.
+  const maxWeek=state.program?.weeks||12;
+  const wm=$('#weekMinus'), wp=$('#weekPlus');
+  if(wm) wm.disabled=state.week<=1;
+  if(wp) wp.disabled=state.week>=maxWeek;
+}
+function lastBodyweight(){ if(lastBwCache!==undefined) return lastBwCache; const list=activeSessionsAsc(); lastBwCache=null; for(let i=list.length-1;i>=0;i--){ if(Number(list[i].bw)>0){ lastBwCache=list[i].bw; break; } } return lastBwCache; }
 function fillSessionFields(){ const lastBw=lastBodyweight()||state.prefs.profile?.weight; $('#sDate').value=state.draft.date||localDate(); $('#sBw').value=state.draft.bw??''; $('#sBw').placeholder=lastBw?`${round(lastBw)} kg`:'kg'; $('#sNotes').value=state.draft.notes||''; $('#sEnergy').value=state.draft.meta.energy??''; $('#sSleep').value=state.draft.meta.sleep??''; }
 function collectSessionFields(){ state.draft.date=$('#sDate').value||localDate(); state.draft.bw=$('#sBw').value===''?null:Math.max(0,Number($('#sBw').value)||0); state.draft.notes=$('#sNotes').value.trim().slice(0,180); state.draft.meta.energy=$('#sEnergy').value?clamp($('#sEnergy').value,1,5):null; state.draft.meta.sleep=$('#sSleep').value?clamp($('#sSleep').value,1,5):null; saveDraft(); }
 
 /* ---- Logbook view: the whole day as one checklist, one exercise expanded at a time ---- */
 function draftSetsFor(name){ return state.draft.exercises[name]?.sets || []; }
 function isExerciseDone(name){ return draftSetsFor(name).some(s=>s.reps>0); }
-function firstOpenIndex(){ const list=currentExercises(); const i=list.findIndex(ex=>!isExerciseDone(ex.name)); return i<0 ? (list.length?0:-1) : i; }
+function firstOpenIndex(){ const list=currentExercises(); const i=list.findIndex(ex=>!isExerciseDone(ex.name)); return i<0 ? -1 : i; } // -1: everything logged — show the day as a finished checklist
 function shortSetLabel(s){ const load=Number(s.load)||0, reps=round(s.reps); return load>0 ? `${round(load)}\u00d7${reps}` : `${reps}${s.timed?'s':''}`; }
 function collapsedSummary(ex, last){
-  const drafted=draftSetsFor(ex.name);
+  const drafted=draftSetsFor(ex.name).filter(s=>s.reps>0); // partial rows (load typed, reps pending) aren't a result yet
   if(drafted.length) return {text:drafted.map(shortSetLabel).join(' \u00b7 '), tone:'sum-done'};
   if(last) return {text:`Last ${last.sets.map(shortSetLabel).join(' \u00b7 ')}`, tone:'sum-last'};
   return {text:`${ex.sets} \u00d7 ${ex.reps}${ex.optional?' \u00b7 optional':''}`, tone:'sum-plan'};
@@ -414,23 +472,27 @@ function renderWorkout(){
     </article>`;
   }).join('');
   host.classList.toggle('advanced', !!state.prefs.showRir);
+  if(restActive) tickRest(); // freshly rendered rest button shows the live countdown, not '…'
 }
 function renderExBody(ex,last){
   const saved=draftSetsFor(ex.name);
   const unitPh = ex.timed?'sec':'reps';
   const running = restActive && restExName===ex.name;
-  let sets=''; for(let i=0;i<ex.sets;i++){
+  // Render every drafted set, even beyond today's plan (edited workouts logged under an
+  // older program keep their extra sets instead of silently losing them on update).
+  const rows=Math.max(ex.sets, saved.length);
+  let sets=''; for(let i=0;i<rows;i++){
     const s=saved[i] || {}; const prev=last?.sets?.[i] || null;
     const phLoad = prev && prev.load>0 ? String(round(prev.load)) : 'kg';
     const phReps = prev && prev.reps>0 ? String(round(prev.reps)) : unitPh;
-    sets += `<div class="set-card" data-set="${i}"><div class="set-top"><button class="set-num" data-act="same" type="button" aria-label="Set ${i+1}: copy last time">${i+1}</button><input data-field="load" type="number" inputmode="decimal" min="0" step="0.5" placeholder="${esc(phLoad)}" aria-label="Set ${i+1} load, kg" value="${s.load??''}"><input data-field="reps" type="number" inputmode="numeric" min="0" step="1" placeholder="${esc(phReps)}" aria-label="Set ${i+1} ${ex.timed?'seconds':'reps'}" value="${s.reps??''}"><button class="set-clear" data-act="clearSet" type="button" aria-label="Clear set ${i+1}">\u00d7</button></div><div class="rir-field"><label>RIR<input data-field="rir" type="number" inputmode="numeric" min="0" max="5" step="1" placeholder="0-5" value="${s.rir??''}"></label></div></div>`;
+    sets += `<div class="set-card" data-set="${i}"><div class="set-top"><button class="set-num" data-act="same" type="button" aria-label="Set ${i+1}: copy last time">${i+1}</button><input data-field="load" type="number" inputmode="decimal" min="0" step="0.5" placeholder="${esc(phLoad)}" aria-label="Set ${i+1} load, kg" value="${s.load||''}"><input data-field="reps" type="number" inputmode="numeric" min="0" step="1" placeholder="${esc(phReps)}" aria-label="Set ${i+1} ${ex.timed?'seconds':'reps'}" value="${s.reps||''}"><button class="set-clear" data-act="clearSet" type="button" aria-label="Clear set ${i+1}">\u00d7</button></div><div class="rir-field"><label>RIR<input data-field="rir" type="number" inputmode="numeric" min="0" max="5" step="1" placeholder="0-5" value="${s.rir??''}"></label></div></div>`;
   }
   return `<div class="ex-body">
     <div class="goal-row">
       <div class="goal-box"><span>Target ${esc(ex.reps)} \u00b7 RIR ${esc(String(ex.rir||'\u2014').replace(/\s+/g,''))}</span>${esc(makeGoal(ex,last))}</div>
       <button class="rest-btn ${running?'running':''}" data-rest type="button" aria-label="Rest timer">${running?'\u2026':'Rest '+esc(ex.rest||'2 min')}</button>
     </div>
-    <p class="last-line">${last?`Last time <b>${last.sets.map(setLabel).map(esc).join(' \u00b7 ')}</b> \u00b7 ${esc(shortDate(last.date))}${last.e1rm>0?` \u00b7 e1RM ${round(last.e1rm)} kg`:''}`:'First session \u2014 set your baseline.'}</p>
+    <p class="last-line">${last?`Last time <b>${last.sets.map(setLabel).map(esc).join(' \u00b7 ')}</b> \u00b7 ${esc(shortDate(last.date))}${last.e1rm>0 && !ex.timed && (last.best?.load>0 || ex.bw)?` \u00b7 e1RM ${round(last.e1rm)} kg`:''}`:'First session \u2014 set your baseline.'}</p>
     <div class="sets">${sets}</div>
     ${last && !state.prefs.usedAutofill?'<p class="hint">Tap a set number to fill in last time\u2019s numbers.</p>':''}
     <details class="tech"><summary>Technique</summary><div><p><b>Technique:</b> ${esc(ex.note||'\u2014')}</p><p><b>Substitutions:</b> ${(ex.substitutions||[]).map(esc).join(' \u00b7 ')||'\u2014'}</p></div></details>
@@ -482,12 +544,18 @@ function makeGoal(ex,last){
 function updateSetsFor(block){
   if(!block) return;
   const name=block.dataset.ex; const meta=findExerciseMeta(name); const sets=[];
-  $$('.set-card',block).forEach(card=>{ const load=Number($('[data-field="load"]',card).value)||0, reps=Number($('[data-field="reps"]',card).value)||0, rir=$('[data-field="rir"]',card)?.value ?? ''; if(reps>0) sets.push({load:Math.max(0,load), reps:Math.max(0,reps), rir:rir===''?null:clamp(rir,0,5), timed:!!meta.timed}); });
+  // Keep partial rows (load typed, reps still empty) and row positions so a re-render
+  // doesn't wipe or shift half-entered data; save-time normalizeSet still drops rows
+  // without reps. Trailing empty rows are trimmed.
+  $$('.set-card',block).forEach(card=>{ const load=Number($('[data-field="load"]',card).value)||0, reps=Number($('[data-field="reps"]',card).value)||0, rir=$('[data-field="rir"]',card)?.value ?? ''; sets.push((reps>0||load>0||rir!=='')?{load:Math.max(0,load), reps:Math.max(0,reps), rir:rir===''?null:clamp(rir,0,5), timed:!!meta.timed}:null); });
+  while(sets.length && !sets[sets.length-1]) sets.pop();
+  for(let i=0;i<sets.length;i++) if(!sets[i]) sets[i]={load:0, reps:0, rir:null, timed:!!meta.timed};
   if(sets.length) state.draft.exercises[name]={sets}; else delete state.draft.exercises[name];
-  if(sets.length && !state.draft.meta.startedAt) state.draft.meta.startedAt=nowIso();
+  const counted=sets.some(s=>s.reps>0);
+  if(counted && !state.draft.meta.startedAt) state.draft.meta.startedAt=nowIso();
   saveDraft(); renderTrainStatus();
-  const done=sets.length>0; block.classList.toggle('done',done);
-  const st=$('.ex-status',block); if(st) st.textContent=done?'\u2713':(Number(block.dataset.i)+1);
+  block.classList.toggle('done',counted);
+  const st=$('.ex-status',block); if(st) st.textContent=counted?'\u2713':(Number(block.dataset.i)+1);
 }
 function syncOpenBlock(){ updateSetsFor($('#exerciseList .ex-block.open')); }
 function toggleExercise(i){
@@ -513,14 +581,23 @@ function tickRest(){ const left=Math.max(0,Math.round((restEndsAt-Date.now())/10
 function toggleRest(btn){ const block=btn.closest('.ex-block'); const name=block?.dataset.ex; if(!name) return; if(restActive && restExName===name) return stopRest(); if(restActive) stopRest(); const meta=findExerciseMeta(name); restExName=name; restActive=true; restEndsAt=Date.now()+parseRestSeconds(meta.rest)*1000; btn.classList.add('running'); startRestTicker(); }
 function shiftWeek(n){ state.week=clamp(state.week+n,1,state.program?.weeks||12); saveLocal(); renderTrainStatus(); $('#weekNumber').textContent=state.week; }
 
-function bestValue(sets){ return Math.max(0,...(sets||[]).map(s=>e1rm(s)||Number(s.reps)||0)); }
+/* Unit-consistent per-set strength: seconds for timed work, e1RM kg otherwise — with
+   bodyweight folded into the load for bodyweight exercises, so 12 pull-ups vs +10 kg × 6
+   compare as total-system strength instead of reps-vs-kilograms. */
+function strengthValue(s, name, session){
+  const meta=findExerciseMeta(name);
+  if(s.timed || meta.timed) return Number(s.reps)||0;
+  if(meta.bw){ const bw=bodyweightForSession(session); if(bw>0) return e1rm({...s, load:(Number(s.load)||0)+bw}); }
+  return e1rm(s)||Number(s.reps)||0;
+}
+function bestValue(sets, name, session){ return Math.max(0,...(sets||[]).map(s=>strengthValue(s,name,session))); }
 function detectPRs(session){
   const prior=state.sessions.filter(s=>String(s.id)!==String(session.id) && !state.pendingDeletes.has(String(s.id)));
   const out=[];
   for(const ex of session.exercises){
     let prevBest=0, seen=false;
-    for(const s of prior){ const m=s.exercises.find(e=>e.name===ex.name); if(!m) continue; seen=true; prevBest=Math.max(prevBest,bestValue(m.sets)); }
-    if(seen && bestValue(ex.sets)>prevBest) out.push(ex.name);
+    for(const s of prior){ const m=s.exercises.find(e=>e.name===ex.name); if(!m) continue; seen=true; prevBest=Math.max(prevBest,bestValue(m.sets,ex.name,s)); }
+    if(seen && bestValue(ex.sets,ex.name,session)>prevBest) out.push(ex.name);
   }
   return out;
 }
@@ -533,10 +610,14 @@ async function saveWorkout(){
   try{
     syncOpenBlock();
     collectSessionFields();
+    // When editing, the draft came from the saved workout: keep every exercise, even ones no
+    // longer in the current day's plan (day switches and program updates must not silently
+    // strip logged training data from the workout being edited).
+    const editing=!!state.editId;
     const dayNames=new Set(currentExercises().map(x=>x.name));
     const draftEntries=Object.entries(state.draft.exercises);
-    const exercises=draftEntries.filter(([name])=>dayNames.has(name)).map(([name, data])=>normalizeExercise({name,sets:data.sets})).filter(Boolean);
-    const leftovers=Object.fromEntries(draftEntries.filter(([name])=>!dayNames.has(name)));
+    const exercises=draftEntries.filter(([name])=>editing||dayNames.has(name)).map(([name, data])=>normalizeExercise({name,sets:data.sets})).filter(Boolean);
+    const leftovers=editing?{}:Object.fromEntries(draftEntries.filter(([name])=>!dayNames.has(name)));
     if(!exercises.length){ toast(Object.keys(leftovers).length?`No sets for ${state.day} yet — your other entries are kept in the draft.`:'Enter at least one set.'); return; }
     const meta=normalizeMeta(state.draft.meta);
     if(!state.editId && meta.startedAt){
@@ -565,12 +646,16 @@ async function saveWorkout(){
     else { initDraft(); cancelDraftSave(); store.removeItem(DRAFT_KEY); }
     stopRest();
     state.exIndex=firstOpenIndex();
+    // On iOS, tapping Save doesn't move focus off the last input — blur it so the focus
+    // guard in dataChanged() can't leave the just-saved sets visible as a stale draft.
+    if(document.activeElement?.closest?.('#pageTrain')) document.activeElement.blur();
     saveLocal(); dataChanged();
+    if(state.page==='train' && dirty.train) renderTrain();
     haptic(prs.length?[15,70,15]:12);
     if(prs.length) confetti();
     const milestone=wasNew?milestoneMessage(session):'';
     const prMsg=prs.length?`🏆 PR · ${prs[0]}${prs.length>1?` +${prs.length-1} more`:''} — `:'';
-    if(state.user){ const ok=await syncNow(false); toast(ok?`${prMsg}saved & synced`:`${prMsg}saved locally · sync pending`, ok?'':'danger'); }
+    if(state.user){ const r=await syncNow(false); toast(r===true?`${prMsg}saved & synced`:r==='busy'?`${prMsg}saved · syncing…`:`${prMsg}saved locally · sync pending`, r===true||r==='busy'?'':'danger'); }
     else { toast(`${prMsg}saved locally`); }
     if(milestone) setTimeout(()=>{ toast(milestone); confetti(36); haptic([12,60,12,60,12]); }, 1800);
     if(wasNew){ const earned=checkBadges(buildBadgeCtx(session, prs)); if(earned.length) setTimeout(()=>revealBadges(earned), 900); }
@@ -589,6 +674,7 @@ function sessionInfoLine(s){
 /* Log list: newest first, grouped by month, paginated, details rendered on demand.
    Keeping the details out of the initial markup keeps the DOM small on long histories. */
 let logVisibleCount=30;
+const expandedLog=new Set(); // ids of open log cards — survives re-renders (Show more, background sync)
 function monthLabel(d){ const x=new Date(`${d}T00:00:00`); return Number.isNaN(x.getTime())?d:x.toLocaleDateString(undefined,{month:'long',year:'numeric'}); }
 function sessionDetailsHtml(s){
   return `${sessionInfoLine(s)}${s.exercises.map(e=>`<div style="margin-top:8px"><b>${esc(e.name)}</b><div class="small">${e.sets.map(setLabel).join(', ')}</div></div>`).join('')}<div class="grid2" style="margin-top:12px"><button class="btn secondary" data-edit="${esc(s.id)}" type="button">Edit</button><button class="btn danger-outline" data-delete="${esc(s.id)}" type="button">Delete</button></div>`;
@@ -621,6 +707,18 @@ function renderHistory(){
   }
   if(list.length>shown.length) html+=`<button class="btn secondary show-more" data-more type="button">Show ${Math.min(50, list.length-shown.length)} more · ${list.length-shown.length} left</button>`;
   host.innerHTML=html;
+  // Restore cards the user had open before this rebuild.
+  if(expandedLog.size){
+    const ids=new Set(list.map(s=>String(s.id)));
+    for(const id of [...expandedLog]){ if(!ids.has(id)) expandedLog.delete(id); }
+    for(const id of expandedLog){
+      const btn=host.querySelector(`[data-open="${CSS.escape(id)}"]`); if(!btn) continue;
+      const cardEl=btn.closest('.session'); const body=cardEl?.querySelector('.session-details'); if(!body) continue;
+      const s=state.sessions.find(x=>String(x.id)===id);
+      body.innerHTML=s?sessionDetailsHtml(s):'<p class="muted">Workout not found.</p>'; body.dataset.ready='1';
+      body.hidden=false; cardEl.classList.add('expanded'); btn.setAttribute('aria-expanded','true');
+    }
+  }
 }
 
 async function deleteSession(id, card=null){
@@ -631,9 +729,10 @@ async function deleteSession(id, card=null){
     const session = state.sessions.find(s => String(s.id) === id);
     const label = session ? `${session.day} · ${fmtDate(session.date)}` : 'this workout';
     const similar = session ? similarSessionCount(session) : 0;
+    const cloudable = !!state.user || hasStoredSupabaseSession();
     const ok = await modal({
       title:'Delete workout?',
-      message:`Delete ${label}?${similar?` There ${similar===1?'is':'are'} ${similar} similar saved log${similar===1?'':'s'}, but this deletes only this selected log.`:''} It will disappear locally now and will be marked deleted in Supabase on sync.`,
+      message:`Delete ${label}?${similar?` There ${similar===1?'is':'are'} ${similar} similar saved log${similar===1?'':'s'}, but this deletes only this selected log.`:''}${cloudable?' It will also be removed from your cloud backup on the next sync.':''}`,
       danger:true,
       confirmText:'Delete'
     });
@@ -644,7 +743,6 @@ async function deleteSession(id, card=null){
       card.classList.add('removing');
       await new Promise(r=>setTimeout(r,190));
     }
-    const before = state.sessions.length;
     state.sessions = state.sessions.filter(s => String(s.id) !== id);
     if(state.editId === id) state.editId = null;
     queueDelete(id, session);
@@ -652,10 +750,13 @@ async function deleteSession(id, card=null){
     saveLocal();
     dataChanged();
     renderDiagnostics();
-    toast(before === state.sessions.length ? 'Workout already removed · cloud delete pending' : 'Workout deleted · cloud delete pending');
+    // Undo restores the exact session object and re-queues it for upload (the cloud copy
+    // may already be tombstoned by the sync below).
+    const undo = session ? {label:'Undo', fn:()=>{ if(state.sessions.some(s=>String(s.id)===id)) return; unqueueDelete(id); state.sessions.push(session); invalidateDataCache(); queueUpsert(id); saveLocal(); dataChanged(); toast('Workout restored'); if(state.user) syncNow(false); }} : null;
+    toast('Workout deleted', '', undo);
     if(state.user){
-      const okCloud = await syncNow(false);
-      toast(okCloud?'Workout deleted & synced':'Workout deleted locally · cloud delete pending', okCloud?'':'danger');
+      const r = await syncNow(false);
+      toast(r===true?'Workout deleted & synced':r==='busy'?'Workout deleted · syncing…':'Workout deleted · cloud delete pending', r===true||r==='busy'?'':'danger', undo);
       renderSyncChip();
       renderDiagnostics();
     }
@@ -693,8 +794,12 @@ function trendSlope(vals){
   return my?slope/my*100:0;
 }
 function plateRound(v){ v=Math.max(0,Number(v)||0); const step=v>=20?2.5:1.25; return Math.round(v/step)*step; }
-function bodyweightForSession(session){ return Number(session?.bw)||0; }
-function setVolume(s, name, session){ const bw=isBodyweightExercise(name)?bodyweightForSession(session):0; return ((Number(s.load)||0) + bw) * (Number(s.reps)||0); }
+/* Session bw → last logged bw → profile weight, so pull-up volume doesn't silently drop to
+   zero when the optional Bodyweight field is left empty. */
+function bodyweightForSession(session){ return Number(session?.bw)||Number(lastBodyweight())||Number(state.prefs.profile?.weight)||0; }
+/* Timed holds are excluded from tonnage: counting bodyweight×seconds as kg×reps inflated
+   lifetime volume by thousands of kg per dead hang. */
+function setVolume(s, name, session){ if(s?.timed) return 0; const bw=isBodyweightExercise(name)?bodyweightForSession(session):0; return ((Number(s.load)||0) + bw) * (Number(s.reps)||0); }
 function metricSet(s, metric){ if(metric==='load') return Number(s.load)||0; if(metric==='reps') return Number(s.reps)||0; if(metric==='e1rm') return e1rm(s); return Number(s.load||0)*Number(s.reps||0); }
 function exerciseEntries(name){
   if(entryCache.has(name)) return entryCache.get(name);
@@ -702,7 +807,7 @@ function exerciseEntries(name){
   for(const session of activeSessionsAsc()){
     const ex=session.exercises.find(e=>e.name===name); if(!ex) continue;
     const best=bestSet(ex.sets);
-    out.push({session, date:session.date, name, sets:ex.sets, best, e1rm:e1rm(best), load:Math.max(...ex.sets.map(s=>s.load||0)), reps:Math.max(...ex.sets.map(s=>s.reps||0)), volume:ex.sets.reduce((sum,s)=>sum+setVolume(s,name,session),0)});
+    out.push({session, date:session.date, name, sets:ex.sets, best, e1rm:strengthValue(best,name,session), load:Math.max(...ex.sets.map(s=>s.load||0)), reps:Math.max(...ex.sets.map(s=>s.reps||0)), volume:ex.sets.reduce((sum,s)=>sum+setVolume(s,name,session),0)});
   }
   entryCache.set(name, out);
   return out;
@@ -724,8 +829,9 @@ function renderProgress(){
   if(state.progressView==='overall') renderOverall(); else renderExerciseProgress(state.progressExercise);
 }
 
-function renderOverall(){ $('#progressControls').style.display='none'; $('#viewOverall').classList.add('active'); $('#viewExercise').classList.remove('active'); const sessions=[...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id))).sort((a,b)=>new Date(a.date)-new Date(b.date)); const summaries=allSummaries(); const totalSets=sessions.reduce((sum,s)=>sum+s.exercises.reduce((a,e)=>a+e.sets.length,0),0); const volume=sessions.map(s=>s.exercises.reduce((sum,e)=>sum+e.sets.reduce((a,set)=>a+setVolume(set,e.name,s),0),0)); const weak=summaries.filter(x=>x.plateau||x.regressing); const improving=summaries.filter(x=>x.percent>0); renderStats([['Workouts',sessions.length],['Sets',totalSets],['Improving',improving.length],['Plateaus',weak.length]]); $('#chartTitle').textContent='Overall workload'; $('#chartSubtitle').textContent=sessions.length?`Last ${Math.min(18,sessions.length)} workouts · kg×reps`:''; drawChart(volume, sessions.map(s=>s.date), 'kg×reps'); renderInsights(); $('#listTitle').textContent='Exercise summary'; $('#progressList').innerHTML=summaries.length?summaries.sort((a,b)=>b.percent-a.percent).map(s=>`<div class="progress-row"><div><b>${esc(s.name)}</b><div class="small">${s.entries} logs · best ${round(s.best)} ${esc(s.unit)}</div></div><div class="metric">${s.percent>=0?'+':''}${round(s.percent)}%</div></div>`).join(''):'<div class="empty">No progress yet. Save a workout first.</div>'; }
-function renderExerciseProgress(name){ $('#progressControls').style.display='grid'; $('#viewOverall').classList.remove('active'); $('#viewExercise').classList.add('active'); if(!name){ renderStats([['Best','—'],['Latest','—'],['Change','—'],['Entries',0]]); $('#chartBox').innerHTML='<div class="empty">No chart data.</div>'; renderInsights(); return; } const metric=$('#progressMetric').value==='auto'?autoMetric(name):$('#progressMetric').value; const entries=exerciseEntries(name); const vals=entries.map(e=>valueForEntry(e,metric)); const unit=unitForMetric(metric); const best=vals.length?Math.max(...vals):0, latest=vals[vals.length-1]||0, first=vals[0]||0, change=latest-first; renderStats([['Best',`${round(best)} ${unit}`],['Latest',`${round(latest)} ${unit}`],['Change',`${change>=0?'+':''}${round(change)} ${unit}`],['Entries',entries.length]]); $('#chartTitle').textContent=`${name} · ${metric==='e1rm'?'Estimated 1RM':metric}`; $('#chartSubtitle').textContent=`Last ${Math.min(18, entries.length)} entries`; drawChart(vals, entries.map(e=>e.date), unit); renderInsights(name); $('#listTitle').textContent='Recent entries'; $('#progressList').innerHTML=entries.slice(-12).reverse().map(e=>`<div class="progress-row"><div><b>${esc(fmtDate(e.date))}</b><div class="small">Best set: ${setLabel(e.best)}</div></div><div class="metric">${round(valueForEntry(e,metric))} ${unit}</div></div>`).join('') || '<div class="empty">No entries.</div>'; }
+function setProgressView(view){ const overall=view==='overall'; $('#viewOverall').classList.toggle('active',overall); $('#viewOverall').setAttribute('aria-pressed',String(overall)); $('#viewExercise').classList.toggle('active',!overall); $('#viewExercise').setAttribute('aria-pressed',String(!overall)); }
+function renderOverall(){ $('#progressControls').style.display='none'; setProgressView('overall'); const sessions=[...state.sessions].filter(s=>!state.pendingDeletes.has(String(s.id))).sort((a,b)=>new Date(a.date)-new Date(b.date)); const summaries=allSummaries(); const totalSets=sessions.reduce((sum,s)=>sum+s.exercises.reduce((a,e)=>a+e.sets.length,0),0); const volume=sessions.map(s=>s.exercises.reduce((sum,e)=>sum+e.sets.reduce((a,set)=>a+setVolume(set,e.name,s),0),0)); const weak=summaries.filter(x=>x.plateau||x.regressing); const improving=summaries.filter(x=>x.percent>0); renderStats([['Workouts',sessions.length],['Sets',totalSets],['Improving',improving.length],['Plateaus',weak.length]]); $('#chartTitle').textContent='Overall workload'; $('#chartSubtitle').textContent=sessions.length?`Last ${Math.min(18,sessions.length)} workouts · kg×reps`:''; drawChart(volume, sessions.map(s=>s.date), 'kg×reps'); renderInsights(); $('#listTitle').textContent='Exercise summary'; $('#progressList').innerHTML=summaries.length?summaries.sort((a,b)=>b.percent-a.percent).map(s=>`<div class="progress-row"><div><b>${esc(s.name)}</b><div class="small">${s.entries} logs · best ${round(s.best)} ${esc(s.unit)}</div></div><div class="metric">${s.percent>=0?'+':''}${round(s.percent)}%</div></div>`).join(''):'<div class="empty">No progress yet. Save a workout first.</div>'; }
+function renderExerciseProgress(name){ $('#progressControls').style.display='grid'; setProgressView('exercise'); if(!name){ renderStats([['Best','—'],['Latest','—'],['Change','—'],['Entries',0]]); $('#chartBox').innerHTML='<div class="empty">No chart data.</div>'; renderInsights(); return; } let metric=$('#progressMetric').value==='auto'?autoMetric(name):$('#progressMetric').value; if(findExerciseMeta(name).timed && metric==='e1rm') metric='reps'; /* seconds are not kilograms */ const entries=exerciseEntries(name); const vals=entries.map(e=>valueForEntry(e,metric)); const unit=unitForMetric(metric); const best=vals.length?Math.max(...vals):0, latest=vals[vals.length-1]||0, first=vals[0]||0, change=latest-first; renderStats([['Best',`${round(best)} ${unit}`],['Latest',`${round(latest)} ${unit}`],['Change',`${change>=0?'+':''}${round(change)} ${unit}`],['Entries',entries.length]]); $('#chartTitle').textContent=`${name} · ${metric==='e1rm'?'Estimated 1RM':metric}`; $('#chartSubtitle').textContent=`Last ${Math.min(18, entries.length)} entries`; drawChart(vals, entries.map(e=>e.date), unit); renderInsights(name); $('#listTitle').textContent='Recent entries'; $('#progressList').innerHTML=entries.slice(-12).reverse().map(e=>`<div class="progress-row"><div><b>${esc(fmtDate(e.date))}</b><div class="small">Best set: ${setLabel(e.best)}</div></div><div class="metric">${round(valueForEntry(e,metric))} ${unit}</div></div>`).join('') || '<div class="empty">No entries.</div>'; }
 function renderStats(rows){ $('#statsGrid').innerHTML=rows.map(([l,v])=>`<div class="stat"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join(''); }
 /* Chart is drawn in real pixel space (no viewBox stretching), so points stay round,
    the line can be smoothed, and axis labels are readable. Redrawn on resize. */
@@ -752,17 +858,24 @@ function drawChart(values, labels, unit){
   const pts=vs.map((v,i)=>[vs.length===1?padL+w/2:padL+i/(vs.length-1)*w, yOf(v), v]);
   const line=smoothPath(pts);
   const area=pts.length>1?`${line} L ${round(pts[pts.length-1][0])} ${H-padB} L ${round(pts[0][0])} ${H-padB} Z`:'';
-  const gridYs=[[yOf(maxRaw),maxRaw],[yOf(minRaw),minRaw]];
   const last=pts[pts.length-1];
   const lastLabelY=last[1]<padT+16 ? last[1]+18 : last[1]-10;
+  // The value label on the last point already shows its number — drop the axis label for an
+  // extreme the last point sits on, so the two don't collide in the top/bottom-right corner.
+  const flat=minRaw===maxRaw;
+  const nearRight=last[0]>W-72;
+  const gridYs=(flat?[[yOf(maxRaw),maxRaw,-4]]:[[yOf(maxRaw),maxRaw,-4],[yOf(minRaw),minRaw,12]])
+    .map(([y,v,dy])=>[y,v,dy,!(nearRight && last[2]===v)]);
+  const sameDates=ls.length<2 || ls[0]===ls[ls.length-1];
   box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Progress chart">
     <defs><linearGradient id="mmArea" x1="0" y1="0" x2="0" y2="1"><stop class="grad-a" offset="0"/><stop class="grad-b" offset="1"/></linearGradient></defs>
-    ${gridYs.map(([y,v],gi)=>`<line class="grid-line" x1="${padL}" y1="${round(y)}" x2="${W-padR}" y2="${round(y)}"/><text class="axis-label" x="${W-padR}" y="${round(y)+(gi?12:-4)}" text-anchor="end">${round(v)}</text>`).join('')}
+    ${gridYs.map(([y,v,dy,showLabel])=>`<line class="grid-line" x1="${padL}" y1="${round(y)}" x2="${W-padR}" y2="${round(y)}"/>${showLabel?`<text class="axis-label" x="${W-padR}" y="${round(y)+dy}" text-anchor="end">${round(v)}</text>`:''}`).join('')}
     ${pts.length>1?`<path class="chart-area" d="${area}" fill="url(#mmArea)"/><path class="chart-line" d="${line}"/>`:''}
+    ${pts.map((p,i)=>`<circle class="chart-hit" cx="${round(p[0])}" cy="${round(p[1])}" r="16" data-v="${round(p[2])}" data-u="${esc(unit)}" data-d="${esc(shortDate(ls[i]))}"/>`).join('')}
     ${pts.map((p,i)=>`<circle class="chart-point${i===pts.length-1?' last':''}" cx="${round(p[0])}" cy="${round(p[1])}" r="${i===pts.length-1?4.5:3}" data-v="${round(p[2])}" data-u="${esc(unit)}" data-d="${esc(shortDate(ls[i]))}"><title>${round(p[2])} ${esc(unit)} · ${esc(shortDate(ls[i]))}</title></circle>`).join('')}
     <text class="chart-value" x="${round(Math.min(Math.max(last[0],26),W-30))}" y="${round(lastLabelY)}" text-anchor="middle">${round(last[2])}</text>
     <text class="axis-label" x="${padL}" y="${H-8}">${esc(shortDate(ls[0]))}</text>
-    <text class="axis-label" x="${W-padR}" y="${H-8}" text-anchor="end">${esc(shortDate(ls[ls.length-1]))}</text>
+    ${sameDates?'':`<text class="axis-label" x="${W-padR}" y="${H-8}" text-anchor="end">${esc(shortDate(ls[ls.length-1]))}</text>`}
   </svg>`;
 }
 function renderInsights(selected=''){ const sums=allSummaries(); const achievements=sums.filter(x=>x.percent>0).sort((a,b)=>b.percent-a.percent).slice(0,4); const weak=sums.filter(x=>x.plateau||x.regressing).sort((a,b)=>b.noNewHigh-a.noNewHigh||a.percent-b.percent).slice(0,4); $('#recordsPanel').innerHTML='<h2>Records & achievements</h2>'+(achievements.length?achievements.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">Best ${round(x.best)} ${esc(x.unit)} · ${x.entries} entries</div></div><div class="metric">+${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No positive trend yet.</p>'); $('#weakPanel').innerHTML='<h2>Weak points</h2>'+(weak.length?weak.map(x=>`<div class="progress-row"><div><b>${esc(x.name)}</b><div class="small">${x.regressing?'Trending down':`No new high for ${x.noNewHigh} entries`} · latest ${round(x.latest)} ${esc(x.unit)}</div></div><div class="metric">${round(x.percent)}%</div></div>`).join(''):'<p class="muted">No plateau detected.</p>'); }
@@ -786,34 +899,54 @@ function loadSupabaseSdk(){
 function hasStoredSupabaseSession(){ try{ for(let i=0;i<window.localStorage.length;i++){ const k=window.localStorage.key(i); if(k && k.startsWith('sb-') && k.includes('auth-token')) return true; } }catch(e){} return false; }
 async function getSupabase(){ if(state.supabase) return state.supabase; if(!SUPABASE_URL || !SUPABASE_ANON_KEY) return null; if(!(await loadSupabaseSdk()) || !window.supabase) return null; state.supabase=window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); return state.supabase; }
 function cloudErrorText(error){ return String(error?.message || error?.details || error?.hint || error || ''); }
+function cloudUnavailableMsg(){ return typeof navigator!=='undefined' && navigator.onLine===false ? 'You’re offline — sync will resume when you’re back online' : 'Can’t reach the sync server — try again in a moment'; }
 function toDb(s){ return {id:String(s.id),user_id:state.user.id,date:s.date,week:s.week,day:s.day,bw:s.bw,notes:s.notes,exercises:s.exercises,meta:s.meta||{},updated_at:updatedAt(s),deleted_at:null}; }
 function fromDb(r){ if(!r || r.deleted_at) return null; return normalizeSession({id:r.id,user_id:r.user_id,date:r.date,week:r.week,day:r.day,bw:r.bw,notes:r.notes,exercises:r.exercises,meta:r.meta||{},updated_at:r.updated_at,deleted_at:r.deleted_at}); }
 function deleteTombstoneRow(id){ const meta=state.deleteMeta[String(id)]||{}; const snap=meta.snapshot||{}; const deletedAtValue=meta.deletedAt||nowIso(); return {id:String(id),user_id:state.user.id,date:snap.date||localDate(),week:clamp(snap.week||1,1,12),day:state.split.includes(snap.day)?snap.day:(state.split[0]||'Full Body'),bw:snap.bw??null,notes:snap.notes||'',exercises:Array.isArray(snap.exercises)?snap.exercises:[],meta:normalizeMeta(snap.meta||{}),updated_at:deletedAtValue,deleted_at:deletedAtValue}; }
-async function initAuth(){ if(!hasStoredSupabaseSession()){ renderAuth(); renderSyncChip(); return; } const sb=await getSupabase(); if(!sb){ renderAuth(); renderSyncChip(); return; } /* getSession reads local storage, so a signed-in user stays signed in when the app starts offline */ const {data}=await sb.auth.getSession(); state.user=data?.session?.user||null; sb.auth.onAuthStateChange((ev,session)=>{ state.user=session?.user||null; renderAuth(); renderSyncChip(); if(state.user) syncNow(false); }); renderAuth(); renderSyncChip(); if(state.user) await syncNow(false); }
-function renderAuth(){ const el=$('#authBox'); if(!el) return; if(state.user){ const email=state.user.email||'Signed in'; el.innerHTML=`<div class="account-row"><span class="avatar" aria-hidden="true">${esc((email[0]||'?').toUpperCase())}</span><div class="account-id"><b>${esc(email)}</b><span class="small">Synced with Supabase</span></div></div><div class="grid2" style="margin-top:14px"><button class="btn primary" id="syncNow" type="button">Sync Now</button><button class="btn danger-outline" id="signOut" type="button">Sign Out</button></div>`; } else { el.innerHTML=`<h2>Cloud Sync</h2><p class="small" style="margin-top:2px">Sign in to back up workouts and sync across devices.</p><div class="auth-fields" style="margin-top:12px"><label>Email<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••"></label></div><div class="grid2" style="margin-top:12px"><button class="btn primary" id="signIn" type="button">Sign In</button><button class="btn secondary" id="signUp" type="button">Create Account</button></div>`; } }
-function renderSyncChip(){ const chip=$('#syncChip'); if(!chip) return; const offline=typeof navigator!=='undefined' && navigator.onLine===false; const pending=pendingDeleteCount()+pendingUpsertCount(); if(offline){ chip.className='status-pill warn'; chip.textContent=pending?`Offline · ${pending} pending`:'Offline'; return; } chip.className='status-pill '+(state.user?(pending?'warn':'ok'):(pending?'warn':'')); chip.textContent = state.user ? (pending?`Cloud · ${pending} pending`:'Cloud synced') : (pending?`${pending} pending`:'Local'); }
+let authListenerOn=false;
+async function initAuth(){ if(!hasStoredSupabaseSession()){ renderAuth(); renderSyncChip(); return; } const sb=await getSupabase(); if(!sb){ renderAuth(); renderSyncChip(); return; } /* getSession reads local storage, so a signed-in user stays signed in when the app starts offline */ const {data}=await sb.auth.getSession(); state.user=data?.session?.user||null; if(!authListenerOn){ authListenerOn=true; sb.auth.onAuthStateChange((ev,session)=>{ state.user=session?.user||null; renderAuth(); renderSyncChip(); if(state.user) syncNow(false); }); } renderAuth(); renderSyncChip(); if(state.user) await syncNow(false); }
+function renderAuth(){
+  const el=$('#authBox'); if(!el) return;
+  const mode=state.user?'in':'out';
+  if(el.dataset.mode===mode && mode==='out') return; // don't wipe half-typed credentials on tab revisits
+  el.dataset.mode=mode;
+  if(state.user){ const email=state.user.email||'Signed in'; el.innerHTML=`<div class="account-row"><span class="avatar" aria-hidden="true">${esc((email[0]||'?').toUpperCase())}</span><div class="account-id"><b>${esc(email)}</b><span class="small">Cloud backup on</span></div></div><div class="grid2" style="margin-top:14px"><button class="btn primary" id="syncNow" type="button">Sync Now</button><button class="btn danger-outline" id="signOut" type="button">Sign Out</button></div>`; }
+  else { el.innerHTML=`<h2>Cloud Sync</h2><p class="small" style="margin-top:2px">Sign in to back up workouts and sync across devices.</p><div class="auth-fields" style="margin-top:12px"><label>Email<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••"></label></div><div class="grid2" style="margin-top:12px"><button class="btn primary" id="signIn" type="button">Sign In</button><button class="btn secondary" id="signUp" type="button">Create Account</button></div><button class="linklike" id="forgotPw" type="button">Forgot password?</button>`; }
+}
+function renderSyncChip(){ const chip=$('#syncChip'); if(!chip) return; const cloudable=!!state.user || hasStoredSupabaseSession(); if(!cloudable){ chip.className='status-pill'; chip.textContent='Local'; return; } /* a user with no cloud account shouldn't see permanent 'pending' warnings */ const offline=typeof navigator!=='undefined' && navigator.onLine===false; const pending=pendingDeleteCount()+pendingUpsertCount(); if(offline){ chip.className='status-pill warn'; chip.textContent=pending?`Offline · ${pending} pending`:'Offline'; return; } chip.className='status-pill '+(state.user?(pending?'warn':'ok'):(pending?'warn':'')); chip.textContent = state.user ? (pending?`Cloud · ${pending} pending`:'Cloud synced') : (pending?`${pending} pending`:'Local'); }
 function setAuthBusy(on){ state.authBusy=!!on; ['signIn','signUp'].forEach(id=>{ const b=$('#'+id); if(b) b.disabled=state.authBusy; }); }
-async function signIn(){ if(state.authBusy) return; const sb=await getSupabase(); if(!sb) return toast('Supabase SDK not loaded'); const email=$('#authEmail')?.value.trim(), password=$('#authPassword')?.value; if(!email||!password) return toast('Enter email and password'); setAuthBusy(true); try{ const {data,error}=await sb.auth.signInWithPassword({email,password}); if(error) return toast(error.message,'danger'); state.user=data.user; renderAuth(); await syncNow(); } finally { setAuthBusy(false); } }
-async function signUp(){ if(state.authBusy) return; const sb=await getSupabase(); if(!sb) return toast('Supabase SDK not loaded'); const email=$('#authEmail')?.value.trim(), password=$('#authPassword')?.value; if(!email||!password) return toast('Enter email and password'); if(password.length<6) return toast('Password must be at least 6 characters'); setAuthBusy(true); try{ const {error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}}); toast(error?error.message:'Check your email to confirm your account', error?'danger':''); } finally { setAuthBusy(false); } }
+async function signIn(){ if(state.authBusy) return; const sb=await getSupabase(); if(!sb) return toast(cloudUnavailableMsg()); const email=$('#authEmail')?.value.trim(), password=$('#authPassword')?.value; if(!email||!password) return toast('Enter email and password'); setAuthBusy(true); try{ const {data,error}=await sb.auth.signInWithPassword({email,password}); if(error) return toast(error.message,'danger'); state.user=data.user; renderAuth(); await syncNow(); } finally { setAuthBusy(false); } }
+async function signUp(){ if(state.authBusy) return; const sb=await getSupabase(); if(!sb) return toast(cloudUnavailableMsg()); const email=$('#authEmail')?.value.trim(), password=$('#authPassword')?.value; if(!email||!password) return toast('Enter email and password'); if(password.length<6) return toast('Password must be at least 6 characters'); setAuthBusy(true); try{ const {error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}}); toast(error?error.message:'Check your email to confirm your account', error?'danger':''); } finally { setAuthBusy(false); } }
+async function forgotPassword(){ if(state.authBusy) return; const email=$('#authEmail')?.value.trim(); if(!email) return toast('Enter your email above first'); const sb=await getSupabase(); if(!sb) return toast(cloudUnavailableMsg()); setAuthBusy(true); try{ const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname}); toast(error?error.message:'Check your email for a reset link', error?'danger':''); } finally { setAuthBusy(false); } }
 async function signOut(){ const sb=await getSupabase(); if(sb) await sb.auth.signOut(); state.user=null; renderAuth(); renderSyncChip(); toast('Signed out'); }
 async function selectCloudRows(){ const sb=await getSupabase(); if(!sb||!state.user) return {ok:false,error:'No cloud client',data:[]}; const res=await sb.from('tracker_sessions').select('*').eq('user_id',state.user.id).order('updated_at',{ascending:true}); if(res.error){ state.lastSyncError=cloudErrorText(res.error); return {ok:false,error:state.lastSyncError,data:[]}; } return {ok:true,data:res.data||[]}; }
 async function bulkUpsert(rows){ const sb=await getSupabase(); if(!sb||!state.user) return {ok:false,error:'No cloud client'}; if(!rows.length) return {ok:true}; const res=await sb.from('tracker_sessions').upsert(rows,{onConflict:'user_id,id'}); if(res.error){ state.lastSyncError=cloudErrorText(res.error); return {ok:false,error:state.lastSyncError}; } return {ok:true}; }
 async function deleteCloud(id){ const sb=await getSupabase(); if(!sb||!state.user) return false; id=String(id); const deletedAtValue=state.deleteMeta[id]?.deletedAt||nowIso(); const payload={deleted_at:deletedAtValue,updated_at:deletedAtValue}; let res=await sb.from('tracker_sessions').update(payload).eq('user_id',state.user.id).eq('id',id).select('id,deleted_at'); if(res.error){ state.lastSyncError=cloudErrorText(res.error); renderDiagnostics(); return false; } if(!res.data || !res.data.length){ const up=await bulkUpsert([deleteTombstoneRow(id)]); if(!up.ok) return false; } const check=await sb.from('tracker_sessions').select('id,deleted_at').eq('user_id',state.user.id).eq('id',id).maybeSingle(); if(check.error){ state.lastSyncError=cloudErrorText(check.error); renderDiagnostics(); return false; } if(check.data && !check.data.deleted_at){ state.lastSyncError='Cloud delete not confirmed'; renderDiagnostics(); return false; } if(state.deleteMeta[id]) state.deleteMeta[id].cloudConfirmed=true; return true; }
-function mergeSessions(local,cloudRows){ const tombstones=new Set((cloudRows||[]).filter(r=>r.deleted_at).map(r=>String(r.id))); const map=new Map(); for(const s of local){ const id=String(s.id); if(tombstones.has(id) || state.pendingDeletes.has(id)) continue; map.set(id,s); } for(const r of (cloudRows||[])){ if(r.deleted_at || state.pendingDeletes.has(String(r.id))) continue; const s=fromDb(r); if(!s) continue; const id=String(s.id); const cur=map.get(id); if(!cur || new Date(updatedAt(s)||0) >= new Date(updatedAt(cur)||0)) map.set(id,s); } return [...map.values()].sort((a,b)=>new Date(a.date)-new Date(b.date)||String(a.id).localeCompare(String(b.id))); }
+function mergeSessions(local,cloudRows){ const tombstones=new Set((cloudRows||[]).filter(r=>r.deleted_at).map(r=>String(r.id))); const map=new Map(); for(const s of local){ const id=String(s.id); if(tombstones.has(id) || state.pendingDeletes.has(id)) continue; map.set(id,s); } for(const r of (cloudRows||[])){ if(r.deleted_at || state.pendingDeletes.has(String(r.id))) continue; const s=fromDb(r); if(!s) continue; const id=String(s.id); const cur=map.get(id); if(!cur || new Date(updatedAt(s)||0) > new Date(updatedAt(cur)||0)) map.set(id,s); } return [...map.values()].sort((a,b)=>new Date(a.date)-new Date(b.date)||String(a.id).localeCompare(String(b.id))); } // strict '>' keeps the local object on ties so unchanged pulls don't force a re-render
 function pruneConfirmedDeletesFromPull(cloudRows){ const activeCloudIds=new Set((cloudRows||[]).filter(r=>!r.deleted_at).map(r=>String(r.id))); for(const id of [...state.pendingDeletes]){ if(state.deleteMeta[id]?.cloudConfirmed && !activeCloudIds.has(id)) markDeleteConfirmed(id); } }
+/* syncGeneration invalidates in-flight syncs when a destructive local action (erase/reset)
+   changes the world under them — a stale pull must not resurrect erased workouts. */
+let syncGeneration=0, syncQueued=false;
 async function syncNow(show=true){
-  if(state.syncRunning) return false;
+  if(state.syncRunning){ syncQueued=true; return 'busy'; } // coalesce: the running sync reruns when done
   if(!state.user){ if(show) toast('Sign in first'); return false; }
-  const sb=await getSupabase(); if(!sb){ state.lastSyncError='Supabase SDK not loaded'; saveLocal(false); renderDiagnostics(); if(show) toast('Supabase SDK not loaded'); return false; }
+  const sb=await getSupabase(); if(!sb){ state.lastSyncError='Supabase SDK not loaded'; saveLocal(false); renderDiagnostics(); if(show) toast(cloudUnavailableMsg()); return false; }
   state.syncRunning=true;
+  const gen=syncGeneration;
   purgeQueuedLocalDeletes(); pruneQueues(); saveLocal(false);
   let ok=true;
   try{
     for(const id of [...state.pendingDeletes]){ const deleted=await deleteCloud(id); if(!deleted) ok=false; }
     const uploads=state.sessions.filter(s=>!state.pendingDeletes.has(String(s.id)) && state.pendingUpserts.has(String(s.id)));
-    if(uploads.length){ const up=await bulkUpsert(uploads.map(toDb)); if(up.ok){ uploads.forEach(s=>state.pendingUpserts.delete(String(s.id))); saveLocal(false); } else ok=false; }
+    if(uploads.length){
+      const up=await bulkUpsert(uploads.map(toDb));
+      // Only unqueue ids whose session object is unchanged since capture — an edit saved
+      // while the upload was in flight must stay queued or it never reaches the cloud.
+      if(up.ok){ uploads.forEach(s=>{ if(state.sessions.find(x=>String(x.id)===String(s.id))===s) state.pendingUpserts.delete(String(s.id)); }); saveLocal(false); } else ok=false;
+    }
     const pull=await selectCloudRows();
     if(!pull.ok){ ok=false; if(show) toast('Sync failed', 'danger'); return false; }
+    if(gen!==syncGeneration) return false; // local data was erased/reset mid-sync — discard this pull
     const before=state.sessions;
     state.sessions=mergeSessions(state.sessions,pull.data||[]);
     pruneConfirmedDeletesFromPull(pull.data||[]);
@@ -830,17 +963,19 @@ async function syncNow(show=true){
     state.lastSyncError=cloudErrorText(e); saveLocal(false); renderDiagnostics(); if(show) toast('Sync failed', 'danger'); return false;
   }finally{
     state.syncRunning=false;
+    if(syncQueued){ syncQueued=false; syncNow(false); }
   }
 }
 function renderDiagnostics(){ const el=$('#diagnostics'); if(!el) return; const rows=[['Mode',state.user?'Cloud':'Local only'],['Local workouts',state.sessions.filter(s=>!state.pendingDeletes.has(String(s.id))).length],['Pending uploads',pendingUpsertCount()],['Pending deletes',pendingDeleteCount()],['Last sync',state.lastSyncAt?new Date(state.lastSyncAt).toLocaleString():'Never'],['Schema','soft-delete clean sync'],['Last error',state.lastSyncError||'—']]; el.innerHTML=rows.map(([k,v])=>`<div class="diag-row"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join(''); renderSyncChip(); }
 function setAccordion(button, body, open){ if(!button || !body) return; button.setAttribute('aria-expanded', String(open)); body.hidden = !open; }
 function toggleSessionInfo(){ state.sessionOpen=!state.sessionOpen; setAccordion($('#sessionToggle'), $('#sessionFields'), state.sessionOpen); }
 function toggleDiagnostics(){ const body=$('#diagnostics'); const btn=$('#diagnosticsToggle'); const open=!!body?.hidden; setAccordion(btn, body, open); }
-async function resetLocalData(){ const ok=await modal({title:'Reset local data?',message:'This clears only this device. Cloud workouts stay in Supabase unless you use Erase all data.',danger:true,confirmText:'Reset local'}); if(!ok) return; state.sessions=[]; state.editId=null; invalidateDataCache(); clearDeleteQueue(); clearUpsertQueue(); clearDraft(); store.removeItem(STORE_KEY); saveLocal(); renderApp(); toast('Local data reset'); }
+async function resetLocalData(){ const ok=await modal({title:'Reset local data?',message:'This clears workouts on this device only. Your cloud backup is not affected.',danger:true,confirmText:'Reset local'}); if(!ok) return; syncGeneration++; state.sessions=[]; state.editId=null; invalidateDataCache(); /* keep pendingDeletes: deletes the user already confirmed must still reach the cloud on the next sync */ clearUpsertQueue(); clearDraft(); store.removeItem(STORE_KEY); saveLocal(); renderApp(); toast('Local data reset'); }
 
 async function eraseAllData(){
-  const ok=await modal({title:'Erase all data?',message:state.user?'This marks all cloud workouts deleted in Supabase and removes local data. Type ERASE to continue.':'You are not signed in. This removes only local workouts. Type ERASE to continue.',danger:true,requireText:'ERASE',confirmText:'Erase'});
+  const ok=await modal({title:'Erase all data?',message:state.user?'This permanently removes all workouts from this device and your cloud backup. Type ERASE to continue.':'You are not signed in. This removes only local workouts. Type ERASE to continue.',danger:true,requireText:'ERASE',confirmText:'Erase'});
   if(!ok) return;
+  syncGeneration++; // any in-flight sync must not resurrect the erased sessions from its stale pull
   const sessionsBeforeClear=[...state.sessions];
   const idsBeforeClear=sessionsBeforeClear.map(s=>s.id);
   let cloudOk=!state.user;
@@ -859,20 +994,32 @@ async function eraseAllData(){
   if(cloudOk){ clearDeleteQueue(); clearUpsertQueue(); } else { sessionsBeforeClear.forEach(sess=>queueDelete(sess.id, sess)); clearUpsertQueue(); }
   saveLocal(); renderApp(); toast(cloudOk?'All data erased':'Local erased · cloud erase pending', cloudOk?'':'danger');
 }
-function exportJson(){ download('minmax-v13-backup.json', JSON.stringify({app:'MinMax Tracker',version:APP_VERSION,exportedAt:nowIso(),sessions:state.sessions},null,2),'application/json'); }
-function exportCsv(){ const rows=[['date','week','day','bodyweight','exercise','set','load','reps','rir']]; state.sessions.forEach(s=>s.exercises.forEach(e=>e.sets.forEach((set,i)=>rows.push([s.date,s.week,s.day,s.bw??'',e.name,i+1,set.load,set.reps,set.rir??''])))); download('minmax-v13-log.csv','\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\n'),'text/csv;charset=utf-8'); }
+function exportJson(){ download('minmax-backup.json', JSON.stringify({app:'MinMax Tracker',version:APP_VERSION,exportedAt:nowIso(),sessions:state.sessions},null,2),'application/json'); }
+/* Comma-delimited (the delimiter Sheets/US Excel actually split on \u2014 values are quoted, so
+   commas in notes are safe) with a unit column so 60 s holds aren't read as 60 reps. */
+function exportCsv(){ const rows=[['date','week','day','bodyweight','exercise','set','load','reps_or_seconds','unit','rir']]; state.sessions.forEach(s=>s.exercises.forEach(e=>e.sets.forEach((set,i)=>rows.push([s.date,s.week,s.day,s.bw??'',e.name,i+1,set.load,set.reps,set.timed?'sec':'reps',set.rir??''])))); download('minmax-log.csv','\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n'),'text/csv;charset=utf-8'); }
 function download(name,content,type){ const a=document.createElement('a'), blob=new Blob([content],{type}); a.href=URL.createObjectURL(blob); a.download=name; a.style.display='none'; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500); }
 async function importJsonFile(file){ try{ const data=JSON.parse(await file.text()); const incoming=(Array.isArray(data)?data:data.sessions||[]).map(normalizeSession).filter(Boolean); if(!incoming.length) return toast('No valid sessions found'); const ok=await modal({title:'Import backup?',message:`Import ${incoming.length} workouts and merge with current local data?`,confirmText:'Import'}); if(!ok) return; incoming.forEach(s=>unqueueDelete(s.id)); state.sessions=mergeSessions(state.sessions,incoming); incoming.forEach(s=>state.pendingUpserts.add(String(s.id))); invalidateDataCache(); saveLocal(); renderApp(); if(state.user) syncNow(false); toast('Imported'); }catch(e){ toast('Import failed'); } }
 
 function registerEvents(){
   document.addEventListener('click', async e=>{
     const nav=e.target.closest('[data-nav]'); if(nav) return setPage(nav.dataset.nav);
-    const day=e.target.closest('[data-day]'); if(day){ syncOpenBlock(); collectSessionFields(); state.day=day.dataset.day; state.exIndex=firstOpenIndex(); saveLocal(); renderTrain(); return; }
+    const day=e.target.closest('[data-day]'); if(day){
+      if(day.dataset.day===state.day) return;
+      // Switching day while editing would rewrite the edited workout against the wrong
+      // day's plan — stop editing first (with confirmation) instead of corrupting it.
+      if(state.editId){
+        const ok=await modal({title:'Stop editing?', message:'Switching day closes this edit and discards unsaved changes. The saved workout is not affected.', danger:true, confirmText:'Stop editing'});
+        if(!ok) return;
+        clearDraft();
+      } else { syncOpenBlock(); collectSessionFields(); }
+      state.day=day.dataset.day; state.exIndex=firstOpenIndex(); saveLocal(); renderTrain(); return;
+    }
     const quick=e.target.closest('[data-act]'); if(quick){ e.preventDefault(); applyQuick(quick.closest('.set-card'),quick.dataset.act); return; }
-    const open=e.target.closest('[data-open]'); if(open){ e.preventDefault(); e.stopPropagation(); const card=open.closest('.session'); const body=card.querySelector('.session-details'); const willOpen=body.hidden; if(willOpen && !body.dataset.ready){ const s=state.sessions.find(x=>String(x.id)===String(open.dataset.open)); body.innerHTML=s?sessionDetailsHtml(s):'<p class="muted">Workout not found.</p>'; body.dataset.ready='1'; } body.hidden=!willOpen; card.classList.toggle('expanded', willOpen); open.setAttribute('aria-expanded', String(willOpen)); return; }
+    const open=e.target.closest('[data-open]'); if(open){ e.preventDefault(); e.stopPropagation(); const card=open.closest('.session'); const body=card.querySelector('.session-details'); const willOpen=body.hidden; if(willOpen && !body.dataset.ready){ const s=state.sessions.find(x=>String(x.id)===String(open.dataset.open)); body.innerHTML=s?sessionDetailsHtml(s):'<p class="muted">Workout not found.</p>'; body.dataset.ready='1'; } body.hidden=!willOpen; card.classList.toggle('expanded', willOpen); open.setAttribute('aria-expanded', String(willOpen)); if(willOpen) expandedLog.add(String(open.dataset.open)); else expandedLog.delete(String(open.dataset.open)); return; }
     const more=e.target.closest('[data-more]'); if(more){ logVisibleCount+=50; renderHistory(); return; }
     const themeBtn=e.target.closest('[data-theme-pref]'); if(themeBtn){ setTheme(themeBtn.dataset.themePref); saveLocal(false); return; }
-    const pt=e.target.closest('.chart-point'); if(pt && pt.dataset.v){ toast(`${pt.dataset.v} ${pt.dataset.u} · ${pt.dataset.d}`); return; }
+    const pt=e.target.closest('.chart-point,.chart-hit'); if(pt && pt.dataset.v){ toast(`${pt.dataset.v} ${pt.dataset.u} · ${pt.dataset.d}`); return; }
     const del=e.target.closest('[data-delete]'); if(del){ e.preventDefault(); e.stopPropagation(); await deleteSession(del.dataset.delete, del.closest('.session')); return; }
     const edit=e.target.closest('[data-edit]'); if(edit){ e.preventDefault(); e.stopPropagation(); editSession(edit.dataset.edit); return; }
     const viewBtn=e.target.closest('#viewOverall,#viewExercise'); if(viewBtn){ state.progressView=viewBtn.dataset.view; state.progressExercise=$('#progressExercise')?.value||state.progressExercise||''; renderProgress(); return; }
@@ -882,29 +1029,38 @@ function registerEvents(){
     if(e.target.closest('#aboutRow')){ toggleBadgePanel(); return; }
     if(e.target.closest('#sessionToggle')){ toggleSessionInfo(); return; }
     if(e.target.closest('#diagnosticsToggle')){ toggleDiagnostics(); return; }
-    if(e.target.id==='syncNow') return syncNow(); if(e.target.id==='signIn') return signIn(); if(e.target.id==='signUp') return signUp(); if(e.target.id==='signOut') return signOut();
+    if(e.target.closest('#cancelEdit')){ confirmClearDraft(); return; }
+    if(e.target.id==='syncNow') return syncNow(); if(e.target.id==='signIn') return signIn(); if(e.target.id==='signUp') return signUp(); if(e.target.id==='signOut') return signOut(); if(e.target.id==='forgotPw') return forgotPassword();
   });
   $('#weekMinus').onclick=()=>shiftWeek(-1); $('#weekPlus').onclick=()=>shiftWeek(1); $('#saveWorkout').onclick=saveWorkout; $('#clearDraft').onclick=confirmClearDraft;
   const pill=$('#restPill'); if(pill) pill.onclick=()=>{ stopRest(); toast('Rest skipped'); };
   const rirBox=$('#rirToggle'); if(rirBox) rirBox.addEventListener('change', ()=>{ setShowRir(rirBox.checked); saveLocal(false); });
   const lpBox=$('#lowPowerToggle'); if(lpBox) lpBox.addEventListener('change', ()=>{ state.prefs.lowPower=lpBox.checked; applyLowPower(); saveLocal(false); });
   ['pHeight','pWeight','pAge'].forEach(id=>{ const el=$('#'+id); if(el) el.addEventListener('change', ()=>{ collectProfile(); renderProfile(); }); });
-  let resizeT=null; window.addEventListener('resize', ()=>{ clearTimeout(resizeT); resizeT=setTimeout(()=>{ if(state.page==='progress' && lastChart) drawChart(lastChart.values, lastChart.labels, lastChart.unit); }, 160); });
+  let resizeT=null; window.addEventListener('resize', ()=>{ clearTimeout(resizeT); resizeT=setTimeout(()=>{ if(state.page==='progress' && lastChart) drawChart(lastChart.values, lastChart.labels, lastChart.unit); else dirty.progress=true; /* re-measure on next visit after rotation */ }, 160); });
   document.addEventListener('keydown', e=>{ if(e.key==='Enter' && (e.target.id==='authEmail' || e.target.id==='authPassword')){ e.preventDefault(); signIn(); } });
-  window.addEventListener('online', ()=>{ renderSyncChip(); if(state.user && (pendingDeleteCount()+pendingUpsertCount())>0) syncNow(false); });
+  window.addEventListener('online', ()=>{ renderSyncChip(); if(!state.user && hasStoredSupabaseSession()){ initAuth().catch(()=>{}); } /* SDK load failed while offline — restore the signed-in session now */ else if(state.user && (pendingDeleteCount()+pendingUpsertCount())>0) syncNow(false); });
   window.addEventListener('offline', renderSyncChip);
   window.addEventListener('pagehide', flushDraft);
-  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden'){ flushDraft(); stopRestTicker(); } else if(restActive){ startRestTicker(); } });
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden'){ flushDraft(); stopRestTicker(); if(pendingSwReload && !state.swReloading){ state.swReloading=true; location.reload(); } } else if(restActive){ startRestTicker(); } });
   $('#exerciseList').addEventListener('input', e=>{ const block=e.target.closest('.ex-block'); if(block) updateSetsFor(block); }); ['sDate','sBw','sNotes','sEnergy','sSleep'].forEach(id=>$('#'+id).addEventListener('input', collectSessionFields));
   $('#progressExercise').onchange=()=>{ state.progressExercise=$('#progressExercise').value; renderExerciseProgress(state.progressExercise); }; $('#progressMetric').onchange=()=>{ state.progressExercise=$('#progressExercise').value||state.progressExercise; renderExerciseProgress(state.progressExercise); }; $('#exportJson').onclick=exportJson; $('#exportCsv').onclick=exportCsv; $('#importJsonBtn').onclick=()=>$('#importFile').click(); $('#importFile').onchange=e=>{ if(e.target.files[0]) importJsonFile(e.target.files[0]); e.target.value='';}; $('#resetLocal').onclick=resetLocalData; $('#eraseAll').onclick=eraseAllData;
 }
+let pendingSwReload=false;
 async function registerServiceWorker(){
   if(!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
   try{
     const reg=await navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`);
     reg.update?.();
     let hadController=!!navigator.serviceWorker.controller;
-    navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(!hadController){ hadController=true; return; } if(state.swReloading) return; state.swReloading=true; location.reload(); });
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(!hadController){ hadController=true; return; }
+      if(state.swReloading) return;
+      // Don't restart the app mid-set: defer the update reload while a rest countdown is
+      // running or the user is typing; it applies the next time the app is hidden.
+      if(restActive || trainInputFocused()){ pendingSwReload=true; return; }
+      state.swReloading=true; location.reload();
+    });
   }catch(e){}
 }
 /* Startup renders the visible page from local data immediately; program refresh, auth
