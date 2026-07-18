@@ -2,7 +2,7 @@
 // Deliberately a literal: deriving it from the registration URL (`sw.js?v=`) poisons the
 // LIVE cache when the browser's soft update check runs the new SW body under the previous
 // registration URL — it would install v-next assets under v-previous cache keys.
-const CACHE_VERSION = '17.4.0';
+const CACHE_VERSION = '17.4.1';
 const CACHE = `minmax-${CACHE_VERSION}`;
 // Base-relative paths: the app works from a subpath deploy (e.g. GitHub Pages /repo/) too.
 const BASE = new URL('./', self.location).pathname;
