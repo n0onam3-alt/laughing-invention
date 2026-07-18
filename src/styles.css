@@ -302,8 +302,10 @@ label input,label select{margin-top:6px}
 
 /* ---------- log ---------- */
 /* The log list must be a flow container: as a grid item a sticky month header is trapped
-   inside its own row and never actually sticks. */
-#logList{display:block}
+   inside its own row and never actually sticks. flow-root contains margins; the 18px
+   month-top margin reproduces the old grid rhythm (10px gap + 8px margin) after sibling
+   margin collapsing. */
+#logList{display:flow-root}
 #logList > .session{margin-bottom:10px}
 #logList > .show-more{margin-top:4px}
 .log-month{
@@ -311,8 +313,9 @@ label input,label select{margin-top:6px}
   font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
   background:color-mix(in srgb,var(--bg) 82%,transparent);
   -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
-  border-radius:9px;padding:4px 10px;margin:8px 0 10px 2px;
+  border-radius:9px;padding:4px 10px;margin:18px 0 10px 2px;
 }
+#logList > .log-month:first-child{margin-top:8px}
 .session{
   border:0;border-radius:var(--r-lg);background:var(--panel);box-shadow:var(--shadow);padding:0;overflow:hidden;
   content-visibility:auto;contain-intrinsic-size:auto 72px;
@@ -355,7 +358,7 @@ label input,label select{margin-top:6px}
 .chart-point{fill:var(--panel);stroke:var(--accent);stroke-width:2;cursor:pointer}
 .chart-point.last{fill:var(--accent);stroke:var(--panel)}
 .chart-hit{fill:transparent;cursor:pointer} /* invisible 32px tap targets behind the 6-9px points */
-.chart-box .empty{min-height:180px;display:grid;place-items:center} /* fill the reserved chart area instead of leaving dead space */
+.chart-box .empty{min-height:216px;display:grid;place-items:center} /* fill the full reserved chart area instead of leaving dead space */
 .axis-label{fill:var(--muted);font-size:10px;font-weight:600}
 .chart-value{fill:var(--ink);font-size:12px;font-weight:800;font-variant-numeric:tabular-nums}
 .insights-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:12px}
@@ -429,6 +432,7 @@ label input,label select{margin-top:6px}
   background:rgba(255,255,255,.16);color:#7cc0ff;font-weight:700;font-size:14px;cursor:pointer;
 }
 .toast-act:active{background:rgba(255,255,255,.28)}
+.toast[data-tone="danger"] .toast-act{color:#fff} /* light blue fails contrast on the red danger background */
 
 .modal-backdrop{
   position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.42);
@@ -452,6 +456,7 @@ label input,label select{margin-top:6px}
 .modal-actions .btn.primary{font-weight:700}
 .modal-actions .btn.danger-fill{color:var(--danger);font-weight:700}
 .modal-actions .btn:active{filter:none;background:var(--fill);transform:none}
+.modal-actions .btn:focus-visible{outline-offset:-3px} /* .modal overflow:hidden would clip an outer ring on the flush-edge buttons */
 .noscript{padding:20px;background:var(--dangerBg);color:var(--danger);font-weight:700}
 .card,.session,.set-card,.progress-row,.diag-row{min-width:0}
 

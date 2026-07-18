@@ -413,7 +413,10 @@ function setPage(page){
   window.scrollTo(0, pageScroll[page]||0);
 }
 function renderTrain(){ dirty.train=false; const list=currentExercises(); if(state.exIndex>=list.length) state.exIndex=firstOpenIndex(); $('#weekNumber').textContent=state.week; renderDayTabs(); fillSessionFields(); renderWorkout(); renderTrainStatus(); }
-function renderDayTabs(){ $('#dayTabs').innerHTML = state.split.map(d=>`<button class="chip ${d===state.day?'active':''}" data-day="${esc(d)}" type="button" aria-pressed="${d===state.day}">${esc(d)}</button>`).join(''); try{ $('#dayTabs .chip.active')?.scrollIntoView({inline:'nearest', block:'nearest'}); }catch(e){} }
+function renderDayTabs(){ $('#dayTabs').innerHTML = state.split.map(d=>`<button class="chip ${d===state.day?'active':''}" data-day="${esc(d)}" type="button" aria-pressed="${d===state.day}">${esc(d)}</button>`).join(''); }
+/* Horizontal-only: scrollIntoView would also scroll the page vertically, yanking the
+   viewport on background re-renders. Called only from the day-tap handler. */
+function revealActiveDayChip(){ const chips=$('#dayTabs'), act=$('#dayTabs .chip.active'); if(!chips||!act) return; const target=act.offsetLeft-(chips.clientWidth-act.offsetWidth)/2; chips.scrollTo?.({left:Math.max(0,target), behavior:'smooth'}); }
 function completedCount(){ return currentExercises().filter(ex => (state.draft.exercises[ex.name]?.sets||[]).some(s=>s.reps>0)).length; }
 function renderTrainStatus(){
   const total=currentExercises().length, done=completedCount();
@@ -889,6 +892,7 @@ function loadSupabaseSdk(){
   sdkPromise=new Promise(resolve=>{
     const s=document.createElement('script');
     s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    s.crossOrigin='anonymous'; // CORS request → cacheable 'cors' response, so the SW can cache the SDK for offline starts
     s.async=true;
     s.onload=()=>resolve(true);
     s.onerror=()=>{ sdkPromise=null; resolve(false); };
@@ -922,13 +926,17 @@ async function signOut(){ const sb=await getSupabase(); if(sb) await sb.auth.sig
 async function selectCloudRows(){ const sb=await getSupabase(); if(!sb||!state.user) return {ok:false,error:'No cloud client',data:[]}; const res=await sb.from('tracker_sessions').select('*').eq('user_id',state.user.id).order('updated_at',{ascending:true}); if(res.error){ state.lastSyncError=cloudErrorText(res.error); return {ok:false,error:state.lastSyncError,data:[]}; } return {ok:true,data:res.data||[]}; }
 async function bulkUpsert(rows){ const sb=await getSupabase(); if(!sb||!state.user) return {ok:false,error:'No cloud client'}; if(!rows.length) return {ok:true}; const res=await sb.from('tracker_sessions').upsert(rows,{onConflict:'user_id,id'}); if(res.error){ state.lastSyncError=cloudErrorText(res.error); return {ok:false,error:state.lastSyncError}; } return {ok:true}; }
 async function deleteCloud(id){ const sb=await getSupabase(); if(!sb||!state.user) return false; id=String(id); const deletedAtValue=state.deleteMeta[id]?.deletedAt||nowIso(); const payload={deleted_at:deletedAtValue,updated_at:deletedAtValue}; let res=await sb.from('tracker_sessions').update(payload).eq('user_id',state.user.id).eq('id',id).select('id,deleted_at'); if(res.error){ state.lastSyncError=cloudErrorText(res.error); renderDiagnostics(); return false; } if(!res.data || !res.data.length){ const up=await bulkUpsert([deleteTombstoneRow(id)]); if(!up.ok) return false; } const check=await sb.from('tracker_sessions').select('id,deleted_at').eq('user_id',state.user.id).eq('id',id).maybeSingle(); if(check.error){ state.lastSyncError=cloudErrorText(check.error); renderDiagnostics(); return false; } if(check.data && !check.data.deleted_at){ state.lastSyncError='Cloud delete not confirmed'; renderDiagnostics(); return false; } if(state.deleteMeta[id]) state.deleteMeta[id].cloudConfirmed=true; return true; }
-function mergeSessions(local,cloudRows){ const tombstones=new Set((cloudRows||[]).filter(r=>r.deleted_at).map(r=>String(r.id))); const map=new Map(); for(const s of local){ const id=String(s.id); if(tombstones.has(id) || state.pendingDeletes.has(id)) continue; map.set(id,s); } for(const r of (cloudRows||[])){ if(r.deleted_at || state.pendingDeletes.has(String(r.id))) continue; const s=fromDb(r); if(!s) continue; const id=String(s.id); const cur=map.get(id); if(!cur || new Date(updatedAt(s)||0) > new Date(updatedAt(cur)||0)) map.set(id,s); } return [...map.values()].sort((a,b)=>new Date(a.date)-new Date(b.date)||String(a.id).localeCompare(String(b.id))); } // strict '>' keeps the local object on ties so unchanged pulls don't force a re-render
+/* A session queued for upload always wins over the pull: cloud tombstones and older cloud
+   rows must not clobber a local change that hasn't been uploaded yet (e.g. a workout
+   restored via Undo while the delete-sync's pull was still in flight). Strict '>' keeps the
+   local object on updated_at ties so unchanged pulls don't force a re-render. */
+function mergeSessions(local,cloudRows){ const tombstones=new Set((cloudRows||[]).filter(r=>r.deleted_at).map(r=>String(r.id))); const map=new Map(); for(const s of local){ const id=String(s.id); if(state.pendingDeletes.has(id)) continue; if(tombstones.has(id) && !state.pendingUpserts.has(id)) continue; map.set(id,s); } for(const r of (cloudRows||[])){ const id=String(r.id); if(r.deleted_at || state.pendingDeletes.has(id) || state.pendingUpserts.has(id)) continue; const s=fromDb(r); if(!s) continue; const cur=map.get(id); if(!cur || new Date(updatedAt(s)||0) > new Date(updatedAt(cur)||0)) map.set(id,s); } return [...map.values()].sort((a,b)=>new Date(a.date)-new Date(b.date)||String(a.id).localeCompare(String(b.id))); }
 function pruneConfirmedDeletesFromPull(cloudRows){ const activeCloudIds=new Set((cloudRows||[]).filter(r=>!r.deleted_at).map(r=>String(r.id))); for(const id of [...state.pendingDeletes]){ if(state.deleteMeta[id]?.cloudConfirmed && !activeCloudIds.has(id)) markDeleteConfirmed(id); } }
 /* syncGeneration invalidates in-flight syncs when a destructive local action (erase/reset)
    changes the world under them — a stale pull must not resurrect erased workouts. */
 let syncGeneration=0, syncQueued=false;
 async function syncNow(show=true){
-  if(state.syncRunning){ syncQueued=true; return 'busy'; } // coalesce: the running sync reruns when done
+  if(state.syncRunning){ syncQueued=true; if(show) toast('Sync already running — queued another pass'); return 'busy'; } // coalesce: the running sync reruns when done
   if(!state.user){ if(show) toast('Sign in first'); return false; }
   const sb=await getSupabase(); if(!sb){ state.lastSyncError='Supabase SDK not loaded'; saveLocal(false); renderDiagnostics(); if(show) toast(cloudUnavailableMsg()); return false; }
   state.syncRunning=true;
@@ -1013,7 +1021,7 @@ function registerEvents(){
         if(!ok) return;
         clearDraft();
       } else { syncOpenBlock(); collectSessionFields(); }
-      state.day=day.dataset.day; state.exIndex=firstOpenIndex(); saveLocal(); renderTrain(); return;
+      state.day=day.dataset.day; state.exIndex=firstOpenIndex(); saveLocal(); renderTrain(); revealActiveDayChip(); return;
     }
     const quick=e.target.closest('[data-act]'); if(quick){ e.preventDefault(); applyQuick(quick.closest('.set-card'),quick.dataset.act); return; }
     const open=e.target.closest('[data-open]'); if(open){ e.preventDefault(); e.stopPropagation(); const card=open.closest('.session'); const body=card.querySelector('.session-details'); const willOpen=body.hidden; if(willOpen && !body.dataset.ready){ const s=state.sessions.find(x=>String(x.id)===String(open.dataset.open)); body.innerHTML=s?sessionDetailsHtml(s):'<p class="muted">Workout not found.</p>'; body.dataset.ready='1'; } body.hidden=!willOpen; card.classList.toggle('expanded', willOpen); open.setAttribute('aria-expanded', String(willOpen)); if(willOpen) expandedLog.add(String(open.dataset.open)); else expandedLog.delete(String(open.dataset.open)); return; }

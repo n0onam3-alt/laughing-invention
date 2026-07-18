@@ -1,7 +1,8 @@
-// The version comes from the registration URL (`sw.js?v=APP_VERSION`, see app.js), so it can
-// never drift from the version the page requests. The literal is only a fallback for a
-// registration without a query string.
-const CACHE_VERSION = new URL(self.location.href).searchParams.get('v') || '17.4.0';
+// KEEP IN SYNC with APP_VERSION in src/app.js and the ?v= URLs in index.html.
+// Deliberately a literal: deriving it from the registration URL (`sw.js?v=`) poisons the
+// LIVE cache when the browser's soft update check runs the new SW body under the previous
+// registration URL — it would install v-next assets under v-previous cache keys.
+const CACHE_VERSION = '17.4.0';
 const CACHE = `minmax-${CACHE_VERSION}`;
 // Base-relative paths: the app works from a subpath deploy (e.g. GitHub Pages /repo/) too.
 const BASE = new URL('./', self.location).pathname;
@@ -59,14 +60,20 @@ self.addEventListener('activate', event => {
 // additionally fall back to the canonical app shell, so any entry URL works offline.
 async function networkFirst(event, request){
   const cached = await caches.match(request);
+  const budget = cached ? 3500 : 10000;
   try{
-    const preload = await event.preloadResponse;
+    // The preload promise has no timeout of its own — race it against the same budget, or
+    // a stalling connection would hang startup past the cached-shell fallback.
+    const preload = event.preloadResponse
+      ? await Promise.race([event.preloadResponse, new Promise(res => setTimeout(res, budget, undefined))])
+      : undefined;
     if(preload){
       if(cacheable(preload)) putInCache(request, preload.clone());
       return preload;
     }
+    if(event.preloadResponse && cached) return cached; // preload timed out and we have a shell — don't wait for a second fetch
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), cached ? 3500 : 10000);
+    const timer = setTimeout(() => controller.abort(), budget);
     const response = await fetch(request, {cache: 'no-store', signal: controller.signal});
     clearTimeout(timer);
     if(cacheable(response)) putInCache(request, response);
