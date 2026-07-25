@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '17.3.1';
+const APP_VERSION = '17.3.2';
 const SUPABASE_URL = 'https://fgeseogicphovwroritm.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-D7olun_9Vu3vwtaGNvTkQ_SEXsAd09';
 const STORE_KEY = 'mm_tracker_v13_1_clean_sync_state';
@@ -143,7 +143,8 @@ function normalizeSession(s){
   const exercises=(Array.isArray(s.exercises)?s.exercises:[]).map(normalizeExercise).filter(Boolean);
   if(!exercises.length) return null;
   const ts = isIsoLike(updatedAt(s)) ? updatedAt(s) : nowIso();
-  return {id:String(s.id), user_id:s.user_id||null, date:String(s.date).match(/^\d{4}-\d{2}-\d{2}$/)?s.date:localDate(), week:clamp(s.week||1,1,12), day:state.split.includes(s.day)?s.day:String(s.day), bw:s.bw==null||s.bw===''?null:Math.max(0,Number(s.bw)||0), notes:String(s.notes||'').slice(0,180), exercises, meta:normalizeMeta(s.meta||{}), updated_at:ts, deleted_at:null};
+  const day=state.split.includes(s.day)?s.day:(state.split[0]||String(s.day));
+  return {id:String(s.id), user_id:s.user_id||null, date:String(s.date).match(/^\d{4}-\d{2}-\d{2}$/)?s.date:localDate(), week:clamp(s.week||1,1,12), day, bw:s.bw==null||s.bw===''?null:Math.max(0,Number(s.bw)||0), notes:String(s.notes||'').slice(0,180), exercises, meta:normalizeMeta(s.meta||{}), updated_at:ts, deleted_at:null};
 }
 function normalizeMeta(m){ return {energy:m.energy?clamp(m.energy,1,5):null, sleep:m.sleep?clamp(m.sleep,1,5):null, stress:m.stress?clamp(m.stress,1,5):null, durationMin:m.durationMin?Math.max(0,Number(m.durationMin)||0):null, startedAt:m.startedAt||null, finishedAt:m.finishedAt||null}; }
 
@@ -513,14 +514,19 @@ function tickRest(){ const left=Math.max(0,Math.round((restEndsAt-Date.now())/10
 function toggleRest(btn){ const block=btn.closest('.ex-block'); const name=block?.dataset.ex; if(!name) return; if(restActive && restExName===name) return stopRest(); if(restActive) stopRest(); const meta=findExerciseMeta(name); restExName=name; restActive=true; restEndsAt=Date.now()+parseRestSeconds(meta.rest)*1000; btn.classList.add('running'); startRestTicker(); }
 function shiftWeek(n){ state.week=clamp(state.week+n,1,state.program?.weeks||12); saveLocal(); renderTrainStatus(); $('#weekNumber').textContent=state.week; }
 
-function bestValue(sets){ return Math.max(0,...(sets||[]).map(s=>e1rm(s)||Number(s.reps)||0)); }
+function bestValue(sets, name, session, metric){ return Math.max(0,...(sets||[]).map(s=>metric==='e1rm'?e1rm(s,name,session):(Number(s.reps)||0))); }
 function detectPRs(session){
   const prior=state.sessions.filter(s=>String(s.id)!==String(session.id) && !state.pendingDeletes.has(String(s.id)));
   const out=[];
   for(const ex of session.exercises){
-    let prevBest=0, seen=false;
-    for(const s of prior){ const m=s.exercises.find(e=>e.name===ex.name); if(!m) continue; seen=true; prevBest=Math.max(prevBest,bestValue(m.sets)); }
-    if(seen && bestValue(ex.sets)>prevBest) out.push(ex.name);
+    const history=[];
+    for(const s of prior){ const m=s.exercises.find(e=>e.name===ex.name); if(m) history.push({session:s,exercise:m}); }
+    if(!history.length) continue;
+    const comparable=[...history,{session,exercise:ex}];
+    const meta=findExerciseMeta(ex.name);
+    const metric=!meta.timed && comparable.every(x=>x.exercise.sets.some(set=>effectiveLoad(set,ex.name,x.session)>0)) ? 'e1rm' : 'reps';
+    const prevBest=Math.max(...history.map(x=>bestValue(x.exercise.sets,ex.name,x.session,metric)));
+    if(bestValue(ex.sets,ex.name,session,metric)>prevBest) out.push(ex.name);
   }
   return out;
 }
@@ -668,12 +674,16 @@ async function deleteSession(id, card=null){
 function editSession(id){ const s=state.sessions.find(x=>x.id===id); if(!s) return; state.editId=s.id; state.week=s.week; state.day=s.day; state.exIndex=0; state.draft={date:s.date,bw:s.bw,notes:s.notes,meta:normalizeMeta(s.meta),exercises:Object.fromEntries(s.exercises.map(e=>[e.name,{sets:e.sets}])),editId:s.id}; flushDraft(); setPage('train'); renderTrain(); toast('Editing workout'); }
 
 function setLabel(s){ const load=Number(s.load)||0, reps=round(s.reps); const base=load>0 ? `${round(load)}×${reps}` : `${reps} ${s.timed?'sec':'reps'}`; return `${base}${s.rir!=null?` · RIR ${s.rir}`:''}`; }
-function bestSet(sets){ return [...sets].sort((a,b)=>{ const av=metricSet(a,'e1rm')||metricSet(a,'reps'); const bv=metricSet(b,'e1rm')||metricSet(b,'reps'); return bv-av; })[0] || null; }
+function bestSet(sets, name, session){ const meta=findExerciseMeta(name); return [...sets].sort((a,b)=>{ const metric=meta.timed?'reps':'e1rm'; const av=metricSet(a,metric,name,session)||metricSet(a,'reps',name,session); const bv=metricSet(b,metric,name,session)||metricSet(b,'reps',name,session); return bv-av; })[0] || null; }
 /* Estimated 1RM: mean of Epley and Brzycki (Epley alone overshoots at high reps, Brzycki
    undershoots), with logged RIR folded in as reps-in-the-tank — a set of 8 @ RIR 2 reflects
    the same strength as 10 to failure. Reps capped where the formulas stay reliable. */
-function e1rm(s){
-  const load=Number(s?.load)||0;
+function effectiveLoad(s, name, session){
+  const added=Number(s?.load)||0;
+  return added + (isBodyweightExercise(name)?bodyweightForSession(session):0);
+}
+function e1rm(s, name='', session=null){
+  const load=effectiveLoad(s,name,session);
   if(load<=0) return 0;
   let reps=Math.min(Number(s.reps)||0, 15);
   if(s.rir!=null && s.rir!=='') reps=Math.min(reps + clamp(s.rir,0,4), 16);
@@ -695,21 +705,21 @@ function trendSlope(vals){
 function plateRound(v){ v=Math.max(0,Number(v)||0); const step=v>=20?2.5:1.25; return Math.round(v/step)*step; }
 function bodyweightForSession(session){ return Number(session?.bw)||0; }
 function setVolume(s, name, session){ const bw=isBodyweightExercise(name)?bodyweightForSession(session):0; return ((Number(s.load)||0) + bw) * (Number(s.reps)||0); }
-function metricSet(s, metric){ if(metric==='load') return Number(s.load)||0; if(metric==='reps') return Number(s.reps)||0; if(metric==='e1rm') return e1rm(s); return Number(s.load||0)*Number(s.reps||0); }
+function metricSet(s, metric, name='', session=null){ if(metric==='load') return Number(s.load)||0; if(metric==='reps') return Number(s.reps)||0; if(metric==='e1rm') return e1rm(s,name,session); return Number(s.load||0)*Number(s.reps||0); }
 function exerciseEntries(name){
   if(entryCache.has(name)) return entryCache.get(name);
   const out=[];
   for(const session of activeSessionsAsc()){
     const ex=session.exercises.find(e=>e.name===name); if(!ex) continue;
-    const best=bestSet(ex.sets);
-    out.push({session, date:session.date, name, sets:ex.sets, best, e1rm:e1rm(best), load:Math.max(...ex.sets.map(s=>s.load||0)), reps:Math.max(...ex.sets.map(s=>s.reps||0)), volume:ex.sets.reduce((sum,s)=>sum+setVolume(s,name,session),0)});
+    const best=bestSet(ex.sets,name,session);
+    out.push({session, date:session.date, name, sets:ex.sets, best, e1rm:e1rm(best,name,session), load:Math.max(...ex.sets.map(s=>s.load||0)), reps:Math.max(...ex.sets.map(s=>s.reps||0)), volume:ex.sets.reduce((sum,s)=>sum+setVolume(s,name,session),0)});
   }
   entryCache.set(name, out);
   return out;
 }
 function exerciseNames(){ if(!namesCache){ const set=new Set(); for(const s of activeSessionsAsc()) for(const e of s.exercises) set.add(e.name); namesCache=[...set].sort((a,b)=>a.localeCompare(b)); } return namesCache; }
-function autoMetric(name){ const hasLoad=exerciseEntries(name).some(e=>e.load>0); const meta=findExerciseMeta(name); if(meta.timed) return 'reps'; return hasLoad ? 'e1rm' : 'reps'; }
-function valueForEntry(e, metric){ if(metric==='load') return e.load; if(metric==='reps') return e.reps; if(metric==='volume') return e.volume; return e.e1rm || e.reps; }
+function autoMetric(name){ const entries=exerciseEntries(name); const meta=findExerciseMeta(name); if(meta.timed) return 'reps'; return entries.length && entries.every(e=>e.e1rm>0) ? 'e1rm' : 'reps'; }
+function valueForEntry(e, metric){ if(metric==='load') return e.load; if(metric==='reps') return e.reps; if(metric==='volume') return e.volume; return e.e1rm; }
 function unitForMetric(metric){ if(metric==='volume') return 'kg×reps'; if(metric==='reps') return 'reps/sec'; return 'kg'; }
 function allSummaries(){ return exerciseNames().map(name=>summaryForExercise(name)).filter(Boolean); }
 function summaryForExercise(name){ if(summaryCache.has(name)) return summaryCache.get(name); const entries=exerciseEntries(name); let out=null; if(entries.length){ const metric=autoMetric(name), vals=entries.map(e=>valueForEntry(e,metric)), best=Math.max(...vals), latest=vals[vals.length-1], first=vals[0], change=latest-first, percent=first?change/first*100:0; const lastBestIndex=vals.lastIndexOf(best); const noNewHigh=entries.length-1-lastBestIndex; const trend=trendSlope(vals); const plateau=entries.length>=4 && noNewHigh>=3 && trend<0.35; const regressing=entries.length>=5 && trend<=-1 && latest<best*0.97; out={name, entries:entries.length, metric, unit:unitForMetric(metric), best, latest, first, change, percent, noNewHigh, trend, plateau, regressing}; } summaryCache.set(name, out); return out; }
@@ -770,6 +780,7 @@ function renderInsights(selected=''){ const sums=allSummaries(); const achieveme
 /* The Supabase SDK (~120 KB gz) is injected only when actually needed — a stored auth
    session exists or the user taps Sign in — instead of being parsed on every startup. */
 let sdkPromise=null;
+let authInitPromise=null, authSubscribed=false;
 function loadSupabaseSdk(){
   if(window.supabase) return Promise.resolve(true);
   if(sdkPromise) return sdkPromise;
@@ -789,7 +800,33 @@ function cloudErrorText(error){ return String(error?.message || error?.details |
 function toDb(s){ return {id:String(s.id),user_id:state.user.id,date:s.date,week:s.week,day:s.day,bw:s.bw,notes:s.notes,exercises:s.exercises,meta:s.meta||{},updated_at:updatedAt(s),deleted_at:null}; }
 function fromDb(r){ if(!r || r.deleted_at) return null; return normalizeSession({id:r.id,user_id:r.user_id,date:r.date,week:r.week,day:r.day,bw:r.bw,notes:r.notes,exercises:r.exercises,meta:r.meta||{},updated_at:r.updated_at,deleted_at:r.deleted_at}); }
 function deleteTombstoneRow(id){ const meta=state.deleteMeta[String(id)]||{}; const snap=meta.snapshot||{}; const deletedAtValue=meta.deletedAt||nowIso(); return {id:String(id),user_id:state.user.id,date:snap.date||localDate(),week:clamp(snap.week||1,1,12),day:state.split.includes(snap.day)?snap.day:(state.split[0]||'Full Body'),bw:snap.bw??null,notes:snap.notes||'',exercises:Array.isArray(snap.exercises)?snap.exercises:[],meta:normalizeMeta(snap.meta||{}),updated_at:deletedAtValue,deleted_at:deletedAtValue}; }
-async function initAuth(){ if(!hasStoredSupabaseSession()){ renderAuth(); renderSyncChip(); return; } const sb=await getSupabase(); if(!sb){ renderAuth(); renderSyncChip(); return; } /* getSession reads local storage, so a signed-in user stays signed in when the app starts offline */ const {data}=await sb.auth.getSession(); state.user=data?.session?.user||null; sb.auth.onAuthStateChange((ev,session)=>{ state.user=session?.user||null; renderAuth(); renderSyncChip(); if(state.user) syncNow(false); }); renderAuth(); renderSyncChip(); if(state.user) await syncNow(false); }
+async function initAuth(){
+  if(authInitPromise) return authInitPromise;
+  authInitPromise=(async()=>{
+    if(!hasStoredSupabaseSession()){ renderAuth(); renderSyncChip(); return false; }
+    const sb=await getSupabase();
+    if(!sb){ renderAuth(); renderSyncChip(); return false; }
+    /* getSession reads local storage, so a signed-in user stays signed in offline once
+       the SDK is available. The online handler retries this path if SDK loading failed. */
+    const {data}=await sb.auth.getSession();
+    state.user=data?.session?.user||null;
+    if(!authSubscribed){
+      sb.auth.onAuthStateChange((ev,session)=>{ state.user=session?.user||null; renderAuth(); renderSyncChip(); if(state.user) syncNow(false); });
+      authSubscribed=true;
+    }
+    renderAuth(); renderSyncChip();
+    if(state.user) await syncNow(false);
+    return !!state.user;
+  })();
+  try{ return await authInitPromise; }
+  finally{ authInitPromise=null; }
+}
+async function handleOnline(){
+  renderSyncChip();
+  if(!state.user && hasStoredSupabaseSession()) return initAuth();
+  if(state.user && (pendingDeleteCount()+pendingUpsertCount())>0) return syncNow(false);
+  return false;
+}
 function renderAuth(){ const el=$('#authBox'); if(!el) return; if(state.user){ const email=state.user.email||'Signed in'; el.innerHTML=`<div class="account-row"><span class="avatar" aria-hidden="true">${esc((email[0]||'?').toUpperCase())}</span><div class="account-id"><b>${esc(email)}</b><span class="small">Synced with Supabase</span></div></div><div class="grid2" style="margin-top:14px"><button class="btn primary" id="syncNow" type="button">Sync Now</button><button class="btn danger-outline" id="signOut" type="button">Sign Out</button></div>`; } else { el.innerHTML=`<h2>Cloud Sync</h2><p class="small" style="margin-top:2px">Sign in to back up workouts and sync across devices.</p><div class="auth-fields" style="margin-top:12px"><label>Email<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••"></label></div><div class="grid2" style="margin-top:12px"><button class="btn primary" id="signIn" type="button">Sign In</button><button class="btn secondary" id="signUp" type="button">Create Account</button></div>`; } }
 function renderSyncChip(){ const chip=$('#syncChip'); if(!chip) return; const offline=typeof navigator!=='undefined' && navigator.onLine===false; const pending=pendingDeleteCount()+pendingUpsertCount(); if(offline){ chip.className='status-pill warn'; chip.textContent=pending?`Offline · ${pending} pending`:'Offline'; return; } chip.className='status-pill '+(state.user?(pending?'warn':'ok'):(pending?'warn':'')); chip.textContent = state.user ? (pending?`Cloud · ${pending} pending`:'Cloud synced') : (pending?`${pending} pending`:'Local'); }
 function setAuthBusy(on){ state.authBusy=!!on; ['signIn','signUp'].forEach(id=>{ const b=$('#'+id); if(b) b.disabled=state.authBusy; }); }
@@ -891,7 +928,7 @@ function registerEvents(){
   ['pHeight','pWeight','pAge'].forEach(id=>{ const el=$('#'+id); if(el) el.addEventListener('change', ()=>{ collectProfile(); renderProfile(); }); });
   let resizeT=null; window.addEventListener('resize', ()=>{ clearTimeout(resizeT); resizeT=setTimeout(()=>{ if(state.page==='progress' && lastChart) drawChart(lastChart.values, lastChart.labels, lastChart.unit); }, 160); });
   document.addEventListener('keydown', e=>{ if(e.key==='Enter' && (e.target.id==='authEmail' || e.target.id==='authPassword')){ e.preventDefault(); signIn(); } });
-  window.addEventListener('online', ()=>{ renderSyncChip(); if(state.user && (pendingDeleteCount()+pendingUpsertCount())>0) syncNow(false); });
+  window.addEventListener('online', ()=>{ handleOnline().catch(()=>{ renderAuth(); renderSyncChip(); }); });
   window.addEventListener('offline', renderSyncChip);
   window.addEventListener('pagehide', flushDraft);
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden'){ flushDraft(); stopRestTicker(); } else if(restActive){ startRestTicker(); } });
