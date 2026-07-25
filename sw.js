@@ -1,19 +1,21 @@
-const CACHE_VERSION = '17.3.1';
+const CACHE_VERSION = '17.3.2';
 const CACHE = `minmax-${CACHE_VERSION}`;
+const BASE_URL = new URL('./', self.location.href);
+const assetUrl = path => new URL(path, BASE_URL).toString();
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  `/src/styles.css?v=${CACHE_VERSION}`,
-  `/src/app.js?v=${CACHE_VERSION}`,
-  `/program.json?v=${CACHE_VERSION}`,
-  '/manifest.webmanifest',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
-];
+  '',
+  'index.html',
+  `src/styles.css?v=${CACHE_VERSION}`,
+  `src/app.js?v=${CACHE_VERSION}`,
+  `program.json?v=${CACHE_VERSION}`,
+  'manifest.webmanifest',
+  'icons/icon-192.png',
+  'icons/icon-512.png'
+].map(assetUrl);
 // Only unversioned entry points need to hit the network first. App assets carry a
 // ?v= cache-buster in their URL, so serving them cache-first is always correct and
 // makes repeat startups instant even on slow connections.
-const NETWORK_FIRST = new Set(['/', '/index.html', '/program.json', '/manifest.webmanifest', '/sw.js']);
+const NETWORK_FIRST = new Set(['', 'index.html', 'program.json', 'manifest.webmanifest', 'sw.js'].map(path => new URL(path, BASE_URL).pathname));
 
 const cacheable = response => response && response.ok && (response.type === 'basic' || response.type === 'cors');
 
@@ -30,7 +32,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)));
+    await Promise.all(keys.filter(key => key.startsWith('minmax-') && key !== CACHE).map(key => caches.delete(key)));
     await self.clients.claim();
   })());
 });

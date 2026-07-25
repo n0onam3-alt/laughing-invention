@@ -2,6 +2,18 @@
 
 Mobile-first PWA workout tracker for the Min-Max Program.
 
+## v17.3.2 "reliability"
+Bug fixes:
+- weighted bodyweight exercises now use bodyweight plus added load for e1RM, progress, and PRs
+- progress metrics never mix raw reps with e1RM kilograms in the same series
+- stored Supabase sessions retry authentication when the app comes back online
+- MinMax and Tuck service workers only clean up their own caches
+- PWA paths work from a hosted subdirectory, including GitHub Pages project sites
+- workouts from removed or renamed program days fall back to the first current day when loaded
+
+Regression checks:
+- run `node tests/regression-checks.mjs`
+
 ## v17.3 "vault"
 Badge vault (replaces the gold champion mode):
 - 12 secret badges with hidden unlock conditions — locked slots show only "?"
